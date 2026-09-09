@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add EPANET `EpanetControl` / `EpanetRule` and SWMM `SwmmControl` hybrid text models for create-or-replace via `update_inp_from_settings`.
+- Add EPANET `get_rules()`, split `get_controls()` to simple controls only, and SWMM `get_controls()` with summary counts.
+
+### Fixed
+
+- Avoid raising in `SwmmInpHandler.get_summary()` when no INP is loaded.
+
 ## [0.7.0] - 2026-07-31
 
 ### Added

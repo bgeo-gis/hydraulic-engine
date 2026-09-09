@@ -55,6 +55,8 @@ from .models import (
     # Other classes
     EpanetPattern,
     EpanetCurve,
+    EpanetControl,
+    EpanetRule,
     # Option classes (mirroring WNTR structure)
     EpanetHydraulicOptions,
     EpanetQualityOptions,
@@ -114,6 +116,8 @@ __all__ = [
     # Other classes
     "EpanetPattern",
     "EpanetCurve",
+    "EpanetControl",
+    "EpanetRule",
     # Option classes (mirroring WNTR structure)
     "EpanetHydraulicOptions",
     "EpanetQualityOptions",

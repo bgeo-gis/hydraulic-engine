@@ -22,6 +22,8 @@ import wntr
 
 from typing import Any, Dict, Optional
 from dataclasses import fields, is_dataclass
+from wntr.network.controls import _ControlType
+from wntr.epanet.io import _EpanetRule
 from .file_handler import EpanetFileHandler
 from .models import (
     EpanetFeatureSettings,
@@ -45,6 +47,7 @@ _FEATURE_CONFIG = {
 
 # Configuration for other settings mapping to WNTR methods
 # Format: other_type -> (name_list_attr, getter_method)
+# Controls and rules are handled separately (create-or-replace by name).
 _OTHER_CONFIG = {
     'patterns': ('pattern_name_list', 'get_pattern'),
     'curves': ('curve_name_list', 'get_curve'),
@@ -62,6 +65,35 @@ def _require_inp_loaded(handler: "EpanetInpHandler") -> wntr.network.WaterNetwor
     if handler.file_object is None:
         raise ModelNotLoadedError("No INP file loaded")
     return handler.file_object
+
+
+def _is_simple_control(control_obj: Any) -> bool:
+    """Return True for EPANET [CONTROLS] entries (not [RULES])."""
+    return getattr(control_obj, 'epanet_control_type', None) != _ControlType.rule
+
+
+def _normalize_rule_text(name: str, text: str) -> list[str]:
+    """
+    Split rule text into lines and ensure a RULE header matching ``name``.
+
+    :raises ValidationError: if a RULE header exists with a different id
+    """
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    if not lines:
+        raise ValidationError(f"Rule '{name}' text is empty")
+
+    first_words = lines[0].strip().split()
+    if first_words and first_words[0].upper() == 'RULE':
+        if len(first_words) < 2:
+            raise ValidationError(f"Rule '{name}' has a RULE line without an id")
+        rule_id = first_words[1]
+        if rule_id != name:
+            raise ValidationError(
+                f"Rule dict key '{name}' does not match RULE id '{rule_id}' in text"
+            )
+        return lines
+
+    return [f"RULE {name}"] + lines
 
 
 class EpanetInpHandler(EpanetFileHandler):
@@ -158,7 +190,7 @@ class EpanetInpHandler(EpanetFileHandler):
         
         :param feature_settings: Feature settings to update (junctions, pipes, etc.)
         :param options_settings: Options settings to update (simulation parameters)
-        :param other_settings: Other settings to update (patterns, curves)
+        :param other_settings: Other settings to update (patterns, curves, controls, rules)
         """
         _require_inp_loaded(self)
 
@@ -335,9 +367,10 @@ class EpanetInpHandler(EpanetFileHandler):
         validation_errors: list[str],
     ) -> None:
         """
-        Update INP other settings (patterns, curves).
-        
-        For list attributes (multipliers, points), the entire list is replaced.
+        Update INP other settings (patterns, curves, controls, rules).
+
+        Patterns and curves only update existing elements.
+        Controls and rules use create-or-replace by name.
         """
         wn = self.file_object
 
@@ -364,6 +397,76 @@ class EpanetInpHandler(EpanetFileHandler):
                 self._update_object_attributes(
                     wntr_obj, model_obj, validation_errors
                 )
+
+        self._update_controls(other_settings.controls, validation_errors)
+        self._update_rules(other_settings.rules, validation_errors)
+
+    def _update_controls(
+        self,
+        controls: Optional[dict],
+        validation_errors: list[str],
+    ) -> None:
+        """Create or replace simple EPANET [CONTROLS] entries from INP text."""
+        if controls is None:
+            return
+
+        wn = self.file_object
+        for name, model_obj in controls.items():
+            text = getattr(model_obj, 'text', None)
+            if text is None or not str(text).strip():
+                msg = f"Control '{name}' text is empty"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+
+            text = str(text).strip()
+            try:
+                if name in wn.control_name_list:
+                    wn.remove_control(name)
+                wn.add_control(name, text)
+            except Exception as e:
+                msg = f"Failed to set control '{name}': {e}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+
+    def _update_rules(
+        self,
+        rules: Optional[dict],
+        validation_errors: list[str],
+    ) -> None:
+        """Create or replace EPANET [RULES] entries from INP text."""
+        if rules is None:
+            return
+
+        wn = self.file_object
+        for name, model_obj in rules.items():
+            text = getattr(model_obj, 'text', None)
+            if text is None or not str(text).strip():
+                msg = f"Rule '{name}' text is empty"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+
+            try:
+                lines = _normalize_rule_text(name, str(text))
+                parsed = _EpanetRule.parse_rules_lines(lines)
+                if not parsed:
+                    raise ValueError("no rule parsed from text")
+                if len(parsed) > 1:
+                    raise ValueError(
+                        f"expected one rule, got {len(parsed)}"
+                    )
+                rule_obj = parsed[0].generate_control(wn)
+                if name in wn.control_name_list:
+                    wn.remove_control(name)
+                wn.add_control(name, rule_obj)
+            except ValidationError as e:
+                tools_log.log_warning(str(e))
+                validation_errors.append(str(e))
+            except Exception as e:
+                msg = f"Failed to set rule '{name}': {e}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
 
     # =========================================================================
     # Section Getters
@@ -414,8 +517,22 @@ class EpanetInpHandler(EpanetFileHandler):
         return {name: wn.get_curve(name) for name in wn.curve_name_list}
 
     def get_controls(self) -> Dict[str, Any]:
-        """Get CONTROLS section as dictionary."""
-        return dict(_require_inp_loaded(self).controls)
+        """Get simple [CONTROLS] entries (excludes [RULES])."""
+        wn = _require_inp_loaded(self)
+        return {
+            name: ctrl
+            for name, ctrl in wn.controls()
+            if _is_simple_control(ctrl)
+        }
+
+    def get_rules(self) -> Dict[str, Any]:
+        """Get [RULES] entries (excludes simple [CONTROLS])."""
+        wn = _require_inp_loaded(self)
+        return {
+            name: ctrl
+            for name, ctrl in wn.controls()
+            if not _is_simple_control(ctrl)
+        }
 
     def get_options(self) -> Any:
         """Get OPTIONS object."""
@@ -457,6 +574,14 @@ class EpanetInpHandler(EpanetFileHandler):
         """Get the count of curves."""
         return len(_require_inp_loaded(self).curve_name_list)
 
+    def get_controls_count(self) -> int:
+        """Get the count of simple controls."""
+        return len(self.get_controls())
+
+    def get_rules_count(self) -> int:
+        """Get the count of rules."""
+        return len(self.get_rules())
+
     # =========================================================================
     # Summary
     # =========================================================================
@@ -480,5 +605,7 @@ class EpanetInpHandler(EpanetFileHandler):
                 "valves": self.get_valves_count(),
                 "patterns": self.get_patterns_count(),
                 "curves": self.get_curves_count(),
+                "controls": self.get_controls_count(),
+                "rules": self.get_rules_count(),
             }
         }

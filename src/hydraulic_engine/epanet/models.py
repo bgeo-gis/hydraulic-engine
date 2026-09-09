@@ -684,6 +684,35 @@ class EpanetCurve(EpanetBaseObject):
     points: Optional[list[tuple[float, float]]] = None
 
 
+@dataclass
+class EpanetControl(EpanetBaseObject):
+    """
+    Simple EPANET [CONTROLS] entry as free-form INP text.
+
+    WNTR string API expects SI units, e.g.
+    ``LINK pump1 OPEN AT TIME 6`` or
+    ``LINK pump1 CLOSED IF NODE tank1 BELOW 10``.
+
+    Dict keys in ``EpanetOtherSettings.controls`` are the control names
+    (create if missing, replace if present).
+    """
+    text: Optional[str] = None
+
+
+@dataclass
+class EpanetRule(EpanetBaseObject):
+    """
+    EPANET [RULES] block as free-form INP text.
+
+    May include RULE / IF / THEN / ELSE / PRIORITY lines. If the text has no
+    ``RULE`` header, the dict key is prepended as ``RULE {name}``.
+    The RULE id in the text must match the dict key when both are present.
+
+    WNTR string/rule parsing expects SI units for numeric thresholds.
+    """
+    text: Optional[str] = None
+
+
 # endregion
 
 
@@ -691,13 +720,14 @@ class EpanetCurve(EpanetBaseObject):
 class EpanetOtherSettings:
     """
     Other settings for EPANET INP file.
-    
-    Contains patterns and curves.
-    Note: Controls are not included because WNTR handles them differently
-    and modifying existing controls requires more complex logic.
+
+    Contains patterns, curves, simple controls, and rules.
+    Controls and rules use create-or-replace by name (dict key).
     """
     patterns: Optional[dict[str, EpanetPattern]] = None
     curves: Optional[dict[str, EpanetCurve]] = None
+    controls: Optional[dict[str, EpanetControl]] = None
+    rules: Optional[dict[str, EpanetRule]] = None
 
 
 # endregion

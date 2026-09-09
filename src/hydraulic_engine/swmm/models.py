@@ -489,15 +489,31 @@ class SwmmPattern(SwmmBaseObject):
     cycle: Optional[SwmmPatternCycle] = None
     factors: Optional[list[float]] = None
 
+
+@dataclass
+class SwmmControl(SwmmBaseObject):
+    """
+    One SWMM [CONTROLS] entry as free-form INP text.
+
+    Typically a RULE block (IF / THEN / ELSE / PRIORITY). VARIABLE and
+    EXPRESSION lines are also accepted. Dict keys in
+    ``SwmmOtherSettings.controls`` are the entry names (create if missing,
+    replace if present). The name inside the text must match the dict key.
+    """
+    text: Optional[str] = None
+
 # endregion
 
 @dataclass
 class SwmmOtherSettings:
     """
     Other settings for a SWMM inp file.
+
+    Controls use create-or-replace by name (dict key).
     """
     curves: Optional[dict[str, SwmmCurve]] = None
     timeseries: Optional[dict[str, SwmmTimeseries]] = None
     patterns: Optional[dict[str, SwmmPattern]] = None
+    controls: Optional[dict[str, SwmmControl]] = None
 
 # endregion

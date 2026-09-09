@@ -26,7 +26,7 @@ from .out_handler import SwmmOutHandler
 from .file_handler import SwmmFileHandler
 from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings, \
                     SwmmCrossSection, SwmmJunction, SwmmOutfall, SwmmDivider, SwmmStorage, SwmmConduit, SwmmPump, \
-                    SwmmOrifice, SwmmWeir, SwmmOutlet, SwmmCurve, SwmmTimeseries, SwmmPattern, \
+                    SwmmOrifice, SwmmWeir, SwmmOutlet, SwmmCurve, SwmmTimeseries, SwmmPattern, SwmmControl, \
                     SwmmCrossSectionShape, SwmmOutfallKind, SwmmDividerKind, SwmmStorageKind, \
                     SwmmPumpStatus, SwmmOrificeOrientation, SwmmWeirForm, SwmmWeirRoadSurface, SwmmOutletCurveType, \
                     SwmmFlowUnits, SwmmInfiltration, SwmmFlowRouting, SwmmLinkOffsets, SwmmForceMainEquation, \
@@ -66,6 +66,7 @@ __all__ = [
     "SwmmCurve",
     "SwmmTimeseries",
     "SwmmPattern",
+    "SwmmControl",
     "SwmmCrossSectionShape",
     "SwmmCurveKind",
     "SwmmDividerKind",

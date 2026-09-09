@@ -9,6 +9,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from swmm_api.input_file.section_labels import REPORT
+from swmm_api.input_file.sections import Control
 
 from .export_db import ReportElementSelection, parse_report_kind
 from .file_handler import SwmmFileHandler
@@ -222,7 +223,7 @@ class SwmmInpHandler(SwmmFileHandler):
         other_settings: SwmmOtherSettings,
         validation_errors: list[str],
     ) -> None:
-        """Update INP other settings (curves, timeseries, patterns)."""
+        """Update INP other settings (curves, timeseries, patterns, controls)."""
         # Iterate through all other setting attributes
         for attr_name in dir(other_settings):
             if attr_name.startswith('_'):
@@ -230,6 +231,10 @@ class SwmmInpHandler(SwmmFileHandler):
 
             setting_dict = getattr(other_settings, attr_name, None)
             if setting_dict is None:
+                continue
+
+            if attr_name == 'controls':
+                self._update_controls(setting_dict, validation_errors)
                 continue
 
             # Convert attribute name to uppercase section name (e.g., 'curves' -> 'CURVES')
@@ -248,6 +253,53 @@ class SwmmInpHandler(SwmmFileHandler):
             for item_name, item_obj in setting_dict.items():
                 if item_name in inp_section:
                     self._update_object_attributes(inp_section[item_name], item_obj)
+
+    def _update_controls(
+        self,
+        controls: dict,
+        validation_errors: list[str],
+    ) -> None:
+        """Create or replace SWMM [CONTROLS] entries from INP text."""
+        inp = self.file_object
+
+        if not hasattr(inp, 'CONTROLS') or getattr(inp, 'CONTROLS', None) is None:
+            inp['CONTROLS'] = Control.create_section()
+
+        controls_section = inp.CONTROLS
+
+        for name, model_obj in controls.items():
+            text = getattr(model_obj, 'text', None)
+            if text is None or not str(text).strip():
+                msg = f"Control '{name}' text is empty"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+
+            try:
+                parsed = Control.create_section(str(text).strip())
+                if not parsed:
+                    raise ValueError("no control parsed from text")
+                if len(parsed) != 1:
+                    raise ValueError(
+                        f"expected one CONTROLS entry, got {len(parsed)}"
+                    )
+                obj = next(iter(parsed.values()))
+                obj_name = getattr(obj, 'name', None)
+                if obj_name != name:
+                    raise ValidationError(
+                        f"Control dict key '{name}' does not match "
+                        f"name '{obj_name}' in text"
+                    )
+                if name in controls_section:
+                    del controls_section[name]
+                controls_section.add_obj(obj)
+            except ValidationError as e:
+                tools_log.log_warning(str(e))
+                validation_errors.append(str(e))
+            except Exception as e:
+                msg = f"Failed to set control '{name}': {e}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
 
     def _update_object_attributes(self, target_obj, source_obj) -> None:
         """
@@ -386,6 +438,10 @@ class SwmmInpHandler(SwmmFileHandler):
         """Get PATTERNS section."""
         return _get_section_dict(self, 'PATTERNS')
 
+    def get_controls(self) -> Dict[str, Any]:
+        """Get CONTROLS section."""
+        return _get_section_dict(self, 'CONTROLS')
+
     def get_raingages(self) -> Dict[str, Any]:
         """Get RAINGAGES section."""
         return _get_section_dict(self, 'RAINGAGES')
@@ -434,12 +490,14 @@ class SwmmInpHandler(SwmmFileHandler):
         summary = {
             "file": self.file_path,
             "loaded": self.is_loaded(),
-            "title": self.get_title(),
+            "title": None,
             "counts": {}
         }
 
         if not self.file_object:
             return summary
+
+        summary["title"] = self.get_title()
 
         sections = [
             ("junctions", "JUNCTIONS"),
@@ -456,6 +514,7 @@ class SwmmInpHandler(SwmmFileHandler):
             ("curves", "CURVES"),
             ("timeseries", "TIMESERIES"),
             ("patterns", "PATTERNS"),
+            ("controls", "CONTROLS"),
         ]
 
         for name, attr in sections:
