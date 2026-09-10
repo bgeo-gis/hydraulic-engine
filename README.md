@@ -56,6 +56,8 @@ if swmm_result.status == RunStatus.SUCCESS:
     print(f"SWMM finished in {swmm_result.duration_seconds:.2f}s")
 ```
 
+`run()` uses a hybrid error contract: load/validation failures and unexpected engine crashes raise (`FileLoadError`, `ValidationError`, `SimulationError`); cancel via `step_callback` returning `False` raises `SimulationCancelled`. Finished runs still return a result whose `status` may be `SUCCESS`, `WARNING`, or `ERROR` from RPT/output checks.
+
 Pass `progress_callback=fn` to either runner to receive progress updates during the run.
 
 ### Work with model files

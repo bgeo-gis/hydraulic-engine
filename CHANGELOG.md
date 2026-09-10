@@ -17,10 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Align public EPANET/SWMM exports: `SwmmRunResult`, `EpanetFileHandler`, and `SimulationCancelled` are now part of the package API.
 - Re-export `config` explicitly from `hydraulic_engine.config` for a clearer import surface.
+- Hybrid `run()` error contract: `SimulationCancelled` / `SimulationError` (with optional `.result`) are raised for cancel and engine crashes; RPT/output `SUCCESS`/`WARNING`/`ERROR` still return a result. Giswater should catch `SimulationCancelled` for clean cancel UX.
+- `validate_inp` raises `ModelNotLoadedError` / `FileLoadError` instead of returning an invalid dict for missing state/path.
 
 ### Fixed
 
-- Avoid raising in `SwmmInpHandler.get_summary()` when no INP is loaded.
+- Align `EpanetInpHandler.get_summary()` with SWMM: return empty summary when no INP is loaded (no raise).
 
 ### Removed
 

@@ -82,6 +82,83 @@ class TestSwmmRunner:
         with pytest.raises(FileLoadError):
             runner.run()
 
+    def test_run_with_pyswmm_cancel_raises(self, monkeypatch):
+        from hydraulic_engine import SimulationCancelled
+        from hydraulic_engine.utils.enums import RunStatus
+        from unittest.mock import MagicMock
+
+        class FakeSim:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def __iter__(self):
+                yield None
+
+            percent_complete = 0.1
+            current_time = MagicMock()
+            current_time.strftime = lambda _fmt: "2020-01-01 00:00:00"
+            flow_routing_error = 0.0
+            runoff_error = 0.0
+
+        monkeypatch.setattr(
+            "hydraulic_engine.swmm.runner.Simulation",
+            lambda **_kwargs: FakeSim(),
+        )
+
+        runner = SwmmRunner()
+        runner.rpt = MagicMock()
+        runner.out = MagicMock()
+        result = SwmmRunResult(
+            inp_path="model.inp",
+            rpt_path="model.rpt",
+            out_path="model.out",
+        )
+
+        with pytest.raises(SimulationCancelled) as exc_info:
+            runner._run_with_pyswmm(
+                result, step_callback=lambda _sim, _step: False
+            )
+
+        assert exc_info.value.result is not None
+        assert exc_info.value.result.status == RunStatus.CANCELLED
+        assert runner.result is exc_info.value.result
+
+    def test_run_with_pyswmm_engine_error_raises(self, monkeypatch):
+        from hydraulic_engine import SimulationError
+        from hydraulic_engine.utils.enums import RunStatus
+        from unittest.mock import MagicMock
+
+        class FakeSim:
+            def __enter__(self):
+                raise RuntimeError("swmm engine failed")
+
+            def __exit__(self, *_args):
+                return False
+
+        monkeypatch.setattr(
+            "hydraulic_engine.swmm.runner.Simulation",
+            lambda **_kwargs: FakeSim(),
+        )
+
+        runner = SwmmRunner()
+        runner.rpt = MagicMock()
+        runner.out = MagicMock()
+        result = SwmmRunResult(
+            inp_path="model.inp",
+            rpt_path="model.rpt",
+            out_path="model.out",
+        )
+
+        with pytest.raises(SimulationError) as exc_info:
+            runner._run_with_pyswmm(result, step_callback=None)
+
+        assert "swmm engine failed" in str(exc_info.value)
+        assert exc_info.value.result.status == RunStatus.ERROR
+        assert runner.result is exc_info.value.result
+
     def test_progress_callback(self):
         progress_calls = []
 
@@ -121,6 +198,19 @@ class TestSwmmInpHandler:
         handler = SwmmInpHandler()
         summary = handler.get_summary()
         assert summary["loaded"] is False
+        assert summary["counts"] == {}
+
+    def test_validate_without_load_raises(self):
+        handler = SwmmInpHandler()
+        with pytest.raises(ModelNotLoadedError):
+            handler.validate_inp()
+
+    def test_validate_missing_file_raises(self):
+        handler = SwmmInpHandler()
+        handler.file_path = "nonexistent.inp"
+        handler.file_object = object()  # pretend loaded
+        with pytest.raises(FileLoadError, match="not found"):
+            handler.validate_inp()
 
 
 class TestSwmmControls:

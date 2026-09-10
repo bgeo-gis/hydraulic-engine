@@ -93,6 +93,83 @@ class TestEpanetRunner:
         with pytest.raises(FileLoadError):
             runner.run()
 
+    def test_run_with_epanet_cancel_raises(self, monkeypatch):
+        from hydraulic_engine import SimulationCancelled
+        from hydraulic_engine.utils.enums import RunStatus
+        from unittest.mock import MagicMock
+
+        class FakeEN:
+            def ENopen(self, **kwargs):
+                return None
+
+            def ENgettimeparam(self, _param):
+                return 3600
+
+            def ENreport(self):
+                return None
+
+            def ENclose(self):
+                return None
+
+        monkeypatch.setattr(
+            "hydraulic_engine.epanet.runner.toolkit.ENepanet", FakeEN
+        )
+
+        runner = EpanetRunner()
+        runner.bin = MagicMock()
+        result = EpanetRunResult(
+            inp_path="model.inp",
+            rpt_path="model.rpt",
+            bin_path="model.bin",
+        )
+
+        def cancel_hydraulic(*_args, **_kwargs):
+            raise SimulationCancelled("Stopped at hydraulic step 1")
+
+        monkeypatch.setattr(runner, "_run_hydraulic_simulation", cancel_hydraulic)
+
+        with pytest.raises(SimulationCancelled) as exc_info:
+            runner._run_with_epanet(
+                result, step_callback=None, calculate_water_quality=False
+            )
+
+        assert exc_info.value.result is not None
+        assert exc_info.value.result.status == RunStatus.CANCELLED
+        assert runner.result is exc_info.value.result
+
+    def test_run_with_epanet_engine_error_raises(self, monkeypatch):
+        from hydraulic_engine import SimulationError
+        from hydraulic_engine.utils.enums import RunStatus
+        from unittest.mock import MagicMock
+
+        class FakeEN:
+            def ENopen(self, **kwargs):
+                raise RuntimeError("engine failed")
+
+            def ENclose(self):
+                return None
+
+        monkeypatch.setattr(
+            "hydraulic_engine.epanet.runner.toolkit.ENepanet", FakeEN
+        )
+
+        runner = EpanetRunner()
+        runner.bin = MagicMock()
+        result = EpanetRunResult(
+            inp_path="model.inp",
+            rpt_path="model.rpt",
+            bin_path="model.bin",
+        )
+
+        with pytest.raises(SimulationError) as exc_info:
+            runner._run_with_epanet(
+                result, step_callback=None, calculate_water_quality=False
+            )
+
+        assert "engine failed" in str(exc_info.value)
+        assert exc_info.value.result.status == RunStatus.ERROR
+        assert runner.result is exc_info.value.result
+
 
 class TestEpanetInpHandler:
     """Test EpanetInpHandler class."""
@@ -113,15 +190,21 @@ class TestEpanetInpHandler:
 
     def test_get_summary_not_loaded(self):
         handler = EpanetInpHandler()
-        with pytest.raises(ModelNotLoadedError):
-            handler.get_title()
+        summary = handler.get_summary()
+        assert summary["loaded"] is False
+        assert summary["counts"] == {}
 
-    def test_validate_missing_file_returns_invalid_dict(self):
+    def test_validate_without_load_raises(self):
+        handler = EpanetInpHandler()
+        with pytest.raises(ModelNotLoadedError):
+            handler.validate_inp()
+
+    def test_validate_missing_file_raises(self):
         handler = EpanetInpHandler()
         handler.file_path = "nonexistent.inp"
-        validation = handler.validate_inp()
-        assert validation["valid"] is False
-        assert len(validation["errors"]) > 0
+        handler.file_object = object()  # pretend loaded
+        with pytest.raises(FileLoadError, match="not found"):
+            handler.validate_inp()
 
 
 class TestEpanetControlsAndRules:

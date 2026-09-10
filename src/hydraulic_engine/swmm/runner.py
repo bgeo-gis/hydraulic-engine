@@ -24,10 +24,12 @@ from ..utils.tools_db import HePgDao, get_connection
 from ..exceptions import (
     DatabaseError,
     ExportError,
+    HydraulicEngineError,
     ModelNotLoadedError,
     ValidationError,
     UnsupportedFileTypeError,
     SimulationCancelled,
+    SimulationError,
 )
 
 
@@ -65,7 +67,8 @@ class SwmmRunner:
         )
         result = runner.run()
 
-        # Check results
+        # Check RPT/outcome status (engine crashes raise SimulationError;
+        # step_callback False raises SimulationCancelled)
         if result.status == RunStatus.SUCCESS:
             print(f"Simulation completed successfully in {result.duration_seconds:.2f}s")
             print(f"RPT file: {result.rpt_path}")
@@ -126,9 +129,13 @@ class SwmmRunner:
         """
         Run SWMM simulation using pyswmm.
 
-        :param inp_path: Path to INP file
-        :param rpt_path: Path for RPT output (optional, derived from inp_path if not provided)
-        :param out_path: Path for OUT binary output (optional, derived from inp_path if not provided)
+        Hybrid error contract:
+        - Preconditions (load/validate INP) raise FileLoadError / ValidationError.
+        - step_callback returning False raises SimulationCancelled (with .result).
+        - Unexpected engine failures raise SimulationError (with .result).
+        - Finished runs return SwmmRunResult with SUCCESS / WARNING / ERROR from
+          RPT parsing and output-file checks (no raise).
+
         :param feature_settings: Feature settings for the simulation
         :param options_settings: Options settings for the simulation
         :param other_settings: Other settings for the simulation
@@ -137,6 +144,7 @@ class SwmmRunner:
         :return: SwmmRunResult with simulation results
         """
         result = SwmmRunResult()
+        self.result = result
 
         self.inp = SwmmInpHandler()
         self.inp.load_file(self.inp_path)
@@ -183,6 +191,8 @@ class SwmmRunner:
         :param step_callback: After each step. Return True to continue, False to abort.
             None return is treated as continue.
         :return: Updated SwmmRunResult
+        :raises SimulationCancelled: When step_callback returns False.
+        :raises SimulationError: When the SWMM engine fails unexpectedly.
         """
         import time
         start_time = time.time()
@@ -286,6 +296,8 @@ class SwmmRunner:
                 f"SWMM simulation completed: {result.status.value} "
                 f"({result.duration_seconds:.2f}s, {result.routing_steps} steps)"
             )
+            self.result = result
+            return result
 
         except ImportError:
             raise
@@ -294,16 +306,22 @@ class SwmmRunner:
             result.status = RunStatus.CANCELLED
             result.warnings.append(str(e))
             result.duration_seconds = time.time() - start_time
+            self.result = result
             self._report_progress(100, "Simulation cancelled")
             tools_log.log_info(f"SWMM simulation cancelled: {e}")
+            raise SimulationCancelled(str(e), result=result) from e
+
+        except HydraulicEngineError:
+            self.result = result
+            raise
 
         except Exception as e:
             result.status = RunStatus.ERROR
             result.errors.append(str(e))
-            tools_log.log_error(f"SWMM simulation error: {e}")
             result.duration_seconds = time.time() - start_time
-
-        return result
+            self.result = result
+            tools_log.log_error(f"SWMM simulation error: {e}")
+            raise SimulationError(f"SWMM simulation error: {e}", result=result) from e
 
     def _parse_rpt_status(self, result: SwmmRunResult) -> None:
         """

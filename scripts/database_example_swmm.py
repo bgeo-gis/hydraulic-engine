@@ -72,7 +72,17 @@ def main():
     )
 
     # Run simulation
-    result = runner.run()
+    try:
+        result = runner.run()
+    except he.SimulationCancelled as e:
+        print(f"\n    Simulation cancelled: {e}")
+        return 1
+    except he.SimulationError as e:
+        print(f"\n    Simulation error: {e}")
+        if e.result and e.result.errors:
+            for error in e.result.errors:
+                print(f"      ✗ {error}")
+        return 1
 
     print(f"    - RPT: {result.rpt_path}")
     print(f"    - OUT: {result.out_path}")

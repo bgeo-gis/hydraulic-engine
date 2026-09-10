@@ -2,6 +2,7 @@
 Custom exceptions for hydraulic_engine.
 """
 # -*- coding: utf-8 -*-
+from typing import Any, Optional
 
 
 class HydraulicEngineError(Exception):
@@ -41,8 +42,16 @@ class ExportError(HydraulicEngineError):
 
 
 class SimulationError(HydraulicEngineError):
-    """Raised when a hydraulic simulation fails."""
+    """Raised when a hydraulic simulation fails unexpectedly (engine crash)."""
+
+    def __init__(self, message: str, result: Optional[Any] = None) -> None:
+        super().__init__(message)
+        self.result = result
 
 
 class SimulationCancelled(HydraulicEngineError):
     """Raised when a simulation is stopped by the step callback."""
+
+    def __init__(self, message: str, result: Optional[Any] = None) -> None:
+        super().__init__(message)
+        self.result = result

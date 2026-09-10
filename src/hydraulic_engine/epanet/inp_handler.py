@@ -31,7 +31,7 @@ from .models import (
     EpanetOtherSettings,
 )
 from ..utils import tools_log
-from ..exceptions import FileWriteError, ModelNotLoadedError, ValidationError
+from ..exceptions import FileLoadError, FileWriteError, ModelNotLoadedError, ValidationError
 
 
 # Configuration for feature types mapping to WNTR methods
@@ -139,19 +139,24 @@ class EpanetInpHandler(EpanetFileHandler):
     def validate_inp(self) -> Dict[str, Any]:
         """
         Validate an INP file without running simulation.
-        
-        :return: Validation result dictionary
+
+        :return: Validation result dictionary with valid/errors/warnings/info
+        :raises ModelNotLoadedError: If no INP has been loaded
+        :raises FileLoadError: If the INP path does not exist
+        :raises ValidationError: If parsing the INP fails
         """
+        if not self.file_path or not self.is_loaded():
+            raise ModelNotLoadedError("No INP file loaded")
+
+        if not os.path.isfile(self.file_path):
+            raise FileLoadError(f"File not found: {self.file_path}")
+
         validation = {
             "valid": False,
             "errors": [],
             "warnings": [],
             "info": {}
         }
-
-        if not os.path.isfile(self.file_path):
-            validation["errors"].append(f"File not found: {self.file_path}")
-            return validation
 
         try:
             wn = wntr.network.WaterNetworkModel(self.file_path)
@@ -168,6 +173,8 @@ class EpanetInpHandler(EpanetFileHandler):
             validation["valid"] = True
             tools_log.log_info(f"INP validation successful: {self.file_path}")
 
+        except ValidationError:
+            raise
         except Exception as e:
             tools_log.log_error(f"INP validation failed: {e}")
             raise ValidationError(f"INP validation failed for '{self.file_path}': {e}") from e
@@ -589,23 +596,31 @@ class EpanetInpHandler(EpanetFileHandler):
     def get_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the INP file contents.
-        
-        :return: Dictionary with counts of each element type
+
+        :return: Dictionary with counts of each element type. When no INP is
+            loaded, returns loaded=False and empty counts (does not raise).
         """
-        return {
+        summary = {
             "file": self.file_path,
             "loaded": self.is_loaded(),
-            "title": self.get_title(),
-            "counts": {
-                "junctions": self.get_junctions_count(),
-                "reservoirs": self.get_reservoirs_count(),
-                "tanks": self.get_tanks_count(),
-                "pipes": self.get_pipes_count(),
-                "pumps": self.get_pumps_count(),
-                "valves": self.get_valves_count(),
-                "patterns": self.get_patterns_count(),
-                "curves": self.get_curves_count(),
-                "controls": self.get_controls_count(),
-                "rules": self.get_rules_count(),
-            }
+            "title": None,
+            "counts": {},
         }
+
+        if not self.file_object:
+            return summary
+
+        summary["title"] = self.get_title()
+        summary["counts"] = {
+            "junctions": self.get_junctions_count(),
+            "reservoirs": self.get_reservoirs_count(),
+            "tanks": self.get_tanks_count(),
+            "pipes": self.get_pipes_count(),
+            "pumps": self.get_pumps_count(),
+            "valves": self.get_valves_count(),
+            "patterns": self.get_patterns_count(),
+            "curves": self.get_curves_count(),
+            "controls": self.get_controls_count(),
+            "rules": self.get_rules_count(),
+        }
+        return summary

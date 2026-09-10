@@ -20,7 +20,13 @@ from .bin_handler import EpanetBinHandler
 from .inp_handler import EpanetInpHandler
 from .models import EpanetFeatureSettings, EpanetOptionsSettings, EpanetOtherSettings
 from ..utils.tools_api import HeFrostClient
-from ..exceptions import ValidationError, UnsupportedFileTypeError
+from ..exceptions import (
+    HydraulicEngineError,
+    ValidationError,
+    UnsupportedFileTypeError,
+    SimulationCancelled,
+    SimulationError,
+)
 
 
 @dataclass
@@ -56,7 +62,8 @@ class EpanetRunner:
         )
         result = runner.run()
 
-        # Check results
+        # Check RPT/outcome status (engine crashes raise SimulationError;
+        # step_callback False raises SimulationCancelled)
         if result.status == RunStatus.SUCCESS:
             print(f"Simulation completed successfully in {result.duration_seconds:.2f}s")
             print(f"RPT file: {result.rpt_path}")
@@ -119,6 +126,13 @@ class EpanetRunner:
         """
         Run EPANET simulation.
 
+        Hybrid error contract:
+        - Preconditions (load/validate INP) raise FileLoadError / ValidationError.
+        - step_callback returning False raises SimulationCancelled (with .result).
+        - Unexpected engine failures raise SimulationError (with .result).
+        - Finished runs return EpanetRunResult with SUCCESS / WARNING / ERROR from
+          RPT parsing and output-file checks (no raise).
+
         :param feature_settings: Feature settings for the simulation (junctions, pipes, etc.)
         :param options_settings: Options settings for the simulation (time, hydraulics, etc.)
         :param other_settings: Other settings for the simulation (patterns, curves, etc.)
@@ -128,6 +142,7 @@ class EpanetRunner:
         :return: EpanetRunResult with simulation results
         """
         result = EpanetRunResult()
+        self.result = result
 
         self.inp = EpanetInpHandler()
         self.inp.load_file(self.inp_path)
@@ -179,9 +194,9 @@ class EpanetRunner:
             None return is treated as continue.
         :param calculate_water_quality: Whether to run water quality simulation
         :return: Updated result with status and duration.
+        :raises SimulationCancelled: When step_callback returns False.
+        :raises SimulationError: When the EPANET engine fails unexpectedly.
         """
-        from ..exceptions import SimulationCancelled
-
         start_time = time.time()
         enData = None
 
@@ -218,7 +233,7 @@ class EpanetRunner:
             # Check if output files were created
             self._report_progress(90, "Simulation completed, checking results...")
 
-            if os.path.isfile(result.rpt_path):
+            if result.rpt_path and os.path.isfile(result.rpt_path):
                 self._parse_rpt_status(result)
             else:
                 result.status = RunStatus.ERROR
@@ -243,17 +258,26 @@ class EpanetRunner:
             self._report_progress(100, f"Simulation finished: {result.status.value}")
             tools_log.log_info(f"EPANET simulation completed: {result.status.value} "
                 f"({result.duration_seconds:.2f}s, {result.routing_steps} steps)")
+            self.result = result
+            return result
         except SimulationCancelled as e:
             result.status = RunStatus.CANCELLED
             result.warnings.append(str(e))
             result.duration_seconds = time.time() - start_time
+            self.result = result
             self._report_progress(100, "Simulation cancelled")
             tools_log.log_info(f"EPANET simulation cancelled: {e}")
+            raise SimulationCancelled(str(e), result=result) from e
+        except HydraulicEngineError:
+            self.result = result
+            raise
         except Exception as e:
             result.status = RunStatus.ERROR
             result.errors.append(str(e))
-            tools_log.log_error(f"EPANET simulation error: {e}")
             result.duration_seconds = time.time() - start_time
+            self.result = result
+            tools_log.log_error(f"EPANET simulation error: {e}")
+            raise SimulationError(f"EPANET simulation error: {e}", result=result) from e
         finally:
             # Ensure EPANET is properly closed even on error
             if enData is not None:
@@ -261,8 +285,6 @@ class EpanetRunner:
                     enData.ENclose()
                 except Exception as e:
                     tools_log.log_warning(f"Error closing EPANET engine: {e}")
-
-        return result
 
     def _run_hydraulic_simulation(
         self,
@@ -278,8 +300,6 @@ class EpanetRunner:
         :param step_callback: Callback function to track simulation progress
         :return: Step count
         """
-        from ..exceptions import SimulationCancelled
-
         enData.ENopenH()
         enData.ENinitH(EN.SAVE)
 
@@ -359,8 +379,6 @@ class EpanetRunner:
         :param step_callback: After each step. Return True to continue, False to abort.
             None return is treated as continue.
         """
-        from ..exceptions import SimulationCancelled
-
         enData.ENopenQ()
         enData.ENinitQ(EN.SAVE)
         step_count = 0

@@ -15,7 +15,7 @@ from .export_db import ReportElementSelection, parse_report_kind
 from .file_handler import SwmmFileHandler
 from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings
 from ..utils import tools_log
-from ..exceptions import FileWriteError, ModelNotLoadedError, ValidationError
+from ..exceptions import FileLoadError, FileWriteError, ModelNotLoadedError, ValidationError
 
 
 def _require_inp_loaded(handler: "SwmmInpHandler") -> Any:
@@ -76,21 +76,26 @@ class SwmmInpHandler(SwmmFileHandler):
     def validate_inp(self) -> Dict[str, Any]:
         """
         Validate an INP file without running full simulation.
-        
+
         Uses swmm-api for parsing validation.
-        
-        :return: Validation result dictionary
+
+        :return: Validation result dictionary with valid/errors/warnings/info
+        :raises ModelNotLoadedError: If no INP has been loaded
+        :raises FileLoadError: If the INP path does not exist
+        :raises ValidationError: If parsing the INP fails
         """
+        if not self.file_path or not self.is_loaded():
+            raise ModelNotLoadedError("No INP file loaded")
+
+        if not os.path.isfile(self.file_path):
+            raise FileLoadError(f"File not found: {self.file_path}")
+
         validation = {
             "valid": False,
             "errors": [],
             "warnings": [],
             "info": {}
         }
-
-        if not os.path.isfile(self.file_path):
-            validation["errors"].append(f"File not found: {self.file_path}")
-            return validation
 
         try:
             inp = self.file_object
@@ -109,6 +114,8 @@ class SwmmInpHandler(SwmmFileHandler):
             validation["valid"] = True
             tools_log.log_info(f"INP validation successful: {self.file_path}")
 
+        except ValidationError:
+            raise
         except Exception as e:
             tools_log.log_error(f"INP validation failed: {e}")
             raise ValidationError(f"INP validation failed for '{self.file_path}': {e}") from e

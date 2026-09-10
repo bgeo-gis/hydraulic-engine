@@ -41,6 +41,15 @@ class TestExceptionHierarchy:
             assert issubclass(exc_cls, HydraulicEngineError)
             assert issubclass(exc_cls, Exception)
 
+    def test_simulation_exceptions_carry_result(self):
+        payload = {"status": "cancelled"}
+        cancelled = SimulationCancelled("stopped", result=payload)
+        error = SimulationError("boom", result=payload)
+        assert cancelled.result is payload
+        assert error.result is payload
+        assert str(cancelled) == "stopped"
+        assert str(error) == "boom"
+
 
 class TestEpanetErrorHandling:
     """Test EPANET handlers raise on failure."""
