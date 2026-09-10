@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add EPANET `EpanetControl` / `EpanetRule` and SWMM `SwmmControl` hybrid text models for create-or-replace via `update_inp_from_settings`.
 - Add EPANET `get_rules()`, split `get_controls()` to simple controls only, and SWMM `get_controls()` with summary counts.
-- Add GitHub Actions CI workflow that runs pytest on Python 3.9–3.12.
+- Add GitHub Actions CI workflow that runs pytest on Python 3.10–3.12.
 
 ### Changed
 
@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remove unused `tools_config` stub (all functions raised `NotImplementedError`).
 - Remove unused SWMM-only fields (`flow_routing_error`, `runoff_error`) from `EpanetRunResult`.
+- Drop Python 3.9 support (`requires-python >=3.10`; WNTR no longer installs cleanly on 3.9).
 
 ## [0.7.0] - 2026-07-31
 
