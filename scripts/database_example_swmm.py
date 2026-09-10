@@ -134,6 +134,8 @@ def main():
     else:
         print(f"    ✗ Failed to export results to DATABASE")
 
+    runner.cleanup()
+
     print("\n" + "=" * 60)
     print("Done!")
     print("=" * 60)

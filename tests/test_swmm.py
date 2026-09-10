@@ -77,6 +77,18 @@ class TestSwmmRunner:
         runner = SwmmRunner(inp_path="model.inp")
         assert runner is not None
 
+    def test_runner_cleanup_removes_temp_files(self):
+        runner = SwmmRunner()
+        runner.rpt = SwmmRptHandler()
+        runner.out = SwmmOutHandler()
+        rpt_path = runner.rpt.get_file_path(None, ".rpt")
+        out_path = runner.out.get_file_path(None, ".out")
+        assert rpt_path.exists()
+        assert out_path.exists()
+        runner.cleanup()
+        assert not rpt_path.exists()
+        assert not out_path.exists()
+
     def test_run_missing_file_raises(self):
         runner = SwmmRunner(inp_path="nonexistent.inp")
         with pytest.raises(FileLoadError):

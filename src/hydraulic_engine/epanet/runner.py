@@ -11,7 +11,7 @@ from wntr.epanet import toolkit
 from wntr.epanet.util import EN
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Callable
+from typing import Any, List, Optional, Callable, Union
 from datetime import datetime
 
 from ..utils.enums import RunStatus, ExportDataSource
@@ -20,6 +20,7 @@ from .bin_handler import EpanetBinHandler
 from .inp_handler import EpanetInpHandler
 from .models import EpanetFeatureSettings, EpanetOptionsSettings, EpanetOtherSettings
 from ..utils.tools_api import HeFrostClient
+from ..utils.tools_db import HePgDao
 from ..exceptions import (
     HydraulicEngineError,
     ValidationError,
@@ -40,10 +41,7 @@ class EpanetRunResult:
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     duration_seconds: Optional[float] = None
-    # Simulation statistics
     routing_steps: Optional[int] = None
-    flow_routing_error: Optional[float] = None
-    runoff_error: Optional[float] = None
 
 
 class EpanetRunner:
@@ -178,7 +176,19 @@ class EpanetRunner:
         self._report_progress(5, "Starting EPANET simulation...")
         tools_log.log_info(f"Running EPANET simulation: {self.inp_path}")
 
-        return self._run_with_epanet(result, step_callback, calculate_water_quality)
+        try:
+            return self._run_with_epanet(result, step_callback, calculate_water_quality)
+        finally:
+            # Temp INP written for settings is no longer needed after the engine finishes.
+            if self.inp is not None:
+                self.inp.cleanup()
+
+    def cleanup(self) -> None:
+        """Remove temporary files created by this runner's handlers."""
+        if self.inp is not None:
+            self.inp.cleanup()
+        if self.bin is not None:
+            self.bin.cleanup()
 
     def _run_with_epanet(
         self,
@@ -464,12 +474,25 @@ class EpanetRunner:
             crs_to: int = 4326,
             start_time: Optional[datetime] = None,
             round_decimals: int = 4,
-            client: Optional[HeFrostClient] = None,
+            client: Optional[Union[HePgDao, HeFrostClient]] = None,
             giswater_version: int = 4,
             only_extrema: bool = False
         ) -> bool:
         """
-        Export the result file to a specific datasource
+        Export the result file to a specific datasource.
+
+        :param to: Target datasource
+        :param result_id: The result identifier
+        :param batch_size: FROST only, number of operations per batch
+        :param max_workers: FROST only, number of concurrent batch requests
+        :param crs_from: FROST only, CRS of the input coordinates
+        :param crs_to: FROST only, CRS of the output coordinates
+        :param start_time: FROST only, simulation start time for observations
+        :param round_decimals: Number of decimal places to round numeric results
+        :param client: HePgDao for DATABASE, HeFrostClient for FROST
+        :param giswater_version: Schema compatibility version for DATABASE export
+        :param only_extrema: DATABASE only, skip time series and export stats only
+        :return: True if export successful
         """
 
         if to == ExportDataSource.DATABASE:

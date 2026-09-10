@@ -19,14 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Re-export `config` explicitly from `hydraulic_engine.config` for a clearer import surface.
 - Hybrid `run()` error contract: `SimulationCancelled` / `SimulationError` (with optional `.result`) are raised for cancel and engine crashes; RPT/output `SUCCESS`/`WARNING`/`ERROR` still return a result. Giswater should catch `SimulationCancelled` for clean cancel UX.
 - `validate_inp` raises `ModelNotLoadedError` / `FileLoadError` instead of returning an invalid dict for missing state/path.
+- `EpanetRunner.export_result` types `client` as `HePgDao | HeFrostClient` (DATABASE vs FROST).
 
 ### Fixed
 
 - Align `EpanetInpHandler.get_summary()` with SWMM: return empty summary when no INP is loaded (no raise).
+- Clean temporary INP files created for settings after `run()`, and expose `runner.cleanup()` for result-file temps after export.
 
 ### Removed
 
 - Remove unused `tools_config` stub (all functions raised `NotImplementedError`).
+- Remove unused SWMM-only fields (`flow_routing_error`, `runoff_error`) from `EpanetRunResult`.
 
 ## [0.7.0] - 2026-07-31
 

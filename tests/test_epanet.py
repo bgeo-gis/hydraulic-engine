@@ -71,6 +71,12 @@ class TestEpanetImports:
         assert EpanetFileHandler is not None
         assert EpanetRunResult is not None
 
+    def test_epanet_run_result_has_no_swmm_fields(self):
+        result = EpanetRunResult()
+        assert not hasattr(result, "flow_routing_error")
+        assert not hasattr(result, "runoff_error")
+        assert hasattr(result, "routing_steps")
+
     def test_import_exceptions_from_epanet(self):
         from hydraulic_engine.epanet import ModelNotLoadedError, ValidationError
         assert issubclass(ModelNotLoadedError, Exception)
@@ -87,6 +93,14 @@ class TestEpanetRunner:
     def test_runner_initialization(self):
         runner = EpanetRunner(inp_path="model.inp")
         assert runner is not None
+
+    def test_runner_cleanup_removes_temp_files(self):
+        runner = EpanetRunner()
+        runner.bin = EpanetBinHandler()
+        temp_path = runner.bin.get_file_path(None, ".bin")
+        assert temp_path.exists()
+        runner.cleanup()
+        assert not temp_path.exists()
 
     def test_run_missing_file_raises(self):
         runner = EpanetRunner(inp_path="nonexistent.inp")

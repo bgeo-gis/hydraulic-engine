@@ -181,7 +181,21 @@ class SwmmRunner:
         self._report_progress(5, "Starting SWMM simulation...")
         tools_log.log_info(f"Running SWMM simulation: {self.inp_path}")
 
-        return self._run_with_pyswmm(result, step_callback)
+        try:
+            return self._run_with_pyswmm(result, step_callback)
+        finally:
+            # Temp INP written for settings is no longer needed after the engine finishes.
+            if self.inp is not None:
+                self.inp.cleanup()
+
+    def cleanup(self) -> None:
+        """Remove temporary files created by this runner's handlers."""
+        if self.inp is not None:
+            self.inp.cleanup()
+        if self.rpt is not None:
+            self.rpt.cleanup()
+        if self.out is not None:
+            self.out.cleanup()
 
     def _run_with_pyswmm(self, result: SwmmRunResult, step_callback: Optional[Callable[[Any, int], bool]] = None) -> SwmmRunResult:
         """

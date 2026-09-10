@@ -126,6 +126,8 @@ def main():
     else:
         print(f"    ✗ Failed to export results to FROST")
 
+    runner.cleanup()
+
     print("\n" + "=" * 60)
     print("Done!")
     print("=" * 60)
