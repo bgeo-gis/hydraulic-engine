@@ -192,6 +192,10 @@ class TestNumericValues:
         series = pd.Series(['1.25', '>50.00', ''], index=['C1', 'C2', 'C3'])
         assert list(numeric_values(series, 2)) == [1.25, 50.0, None]
 
+    def test_coerces_capped_velocity_with_string_dtype(self):
+        series = pd.Series(['1.25', '>50.00', ''], index=['C1', 'C2', 'C3'], dtype='string')
+        assert list(numeric_values(series, 2)) == [1.25, 50.0, None]
+
     def test_rounds_and_maps_missing_to_none(self):
         series = pd.Series([1.234, np.nan, 5.678])
         assert list(numeric_values(series, 2)) == [1.23, None, 5.68]

@@ -290,7 +290,7 @@ def numeric_values(series: pd.Series, round_decimals: Optional[int] = None) -> n
     :return: Object array with float values and None for missing data
     """
     values = series
-    if values.dtype == object:
+    if pd.api.types.is_object_dtype(values) or pd.api.types.is_string_dtype(values):
         values = values.astype(str).str.replace(_LEADING_COMPARATOR, '', regex=True)
 
     numeric = pd.to_numeric(values, errors='coerce').to_numpy(dtype=np.float64)

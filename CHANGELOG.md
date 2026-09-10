@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Align `EpanetInpHandler.get_summary()` with SWMM: return empty summary when no INP is loaded (no raise).
 - Clean temporary INP files created for settings after `run()`, and expose `runner.cleanup()` for result-file temps after export.
+- Strip SWMM ``>`` / ``<`` markers in `numeric_values` for pandas string dtypes as well as object columns.
 
 ### Removed
 
