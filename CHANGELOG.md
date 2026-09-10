@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-10
+
 ### Added
 
 - Add EPANET `EpanetControl` / `EpanetRule` and SWMM `SwmmControl` hybrid text models for create-or-replace via `update_inp_from_settings`.
@@ -132,7 +134,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for batch operations to efficiently create/update Things, Datastreams, and Observations
   - Integration with existing export framework (`ExportDataSource.FROST`)
 
-[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.7.0...main
+[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.8.0...main
+[0.8.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.4.1...v0.5.0
