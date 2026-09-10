@@ -11,10 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add EPANET `EpanetControl` / `EpanetRule` and SWMM `SwmmControl` hybrid text models for create-or-replace via `update_inp_from_settings`.
 - Add EPANET `get_rules()`, split `get_controls()` to simple controls only, and SWMM `get_controls()` with summary counts.
+- Add GitHub Actions CI workflow that runs pytest on Python 3.9–3.12.
+
+### Changed
+
+- Align public EPANET/SWMM exports: `SwmmRunResult`, `EpanetFileHandler`, and `SimulationCancelled` are now part of the package API.
+- Re-export `config` explicitly from `hydraulic_engine.config` for a clearer import surface.
 
 ### Fixed
 
 - Avoid raising in `SwmmInpHandler.get_summary()` when no INP is loaded.
+
+### Removed
+
+- Remove unused `tools_config` stub (all functions raised `NotImplementedError`).
 
 ## [0.7.0] - 2026-07-31
 
@@ -115,14 +125,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for batch operations to efficiently create/update Things, Datastreams, and Observations
   - Integration with existing export framework (`ExportDataSource.FROST`)
 
-[unreleased]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.7.0...main
-[0.7.0]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.6.0...v0.7.0
-[0.6.0]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.4.1...v0.5.0
-[0.4.1]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.3.2...v0.4.0
-[0.3.2]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.3.1...0.3.2
-[0.3.1]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/bgeo-gis/hydraulic_engine/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/bgeo-gis/hydraulic_engine/releases/tag/v0.1.0
+[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.7.0...main
+[0.7.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.3.2...v0.4.0
+[0.3.2]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.3.1...0.3.2
+[0.3.1]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/bgeo-gis/hydraulic-engine/releases/tag/v0.1.0

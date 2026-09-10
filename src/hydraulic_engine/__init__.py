@@ -29,6 +29,7 @@ from .exceptions import (
     APIError,
     ExportError,
     SimulationError,
+    SimulationCancelled,
 )
 from .utils import (
     ExportDataSource,
@@ -59,6 +60,7 @@ __all__ = [
     "APIError",
     "ExportError",
     "SimulationError",
+    "SimulationCancelled",
     "ExportDataSource",
     "create_pg_connection",
     "create_gpkg_connection",

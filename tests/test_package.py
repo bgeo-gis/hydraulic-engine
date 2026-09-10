@@ -39,8 +39,32 @@ class TestPackageImport:
             APIError,
             ExportError,
             SimulationError,
+            SimulationCancelled,
         )
         assert HydraulicEngineError is not None
+        assert SimulationCancelled is not None
+
+    def test_import_symmetric_public_api(self):
+        from hydraulic_engine.epanet import (
+            EpanetRunner,
+            EpanetRunResult,
+            EpanetFileHandler,
+            SimulationCancelled as EpanetSimulationCancelled,
+        )
+        from hydraulic_engine.swmm import (
+            SwmmRunner,
+            SwmmRunResult,
+            SwmmFileHandler,
+            SimulationCancelled as SwmmSimulationCancelled,
+        )
+
+        assert EpanetRunner is not None
+        assert EpanetRunResult is not None
+        assert EpanetFileHandler is not None
+        assert SwmmRunner is not None
+        assert SwmmRunResult is not None
+        assert SwmmFileHandler is not None
+        assert EpanetSimulationCancelled is SwmmSimulationCancelled
 
 
 class TestConfig:

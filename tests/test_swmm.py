@@ -12,9 +12,11 @@ import pytest
 from hydraulic_engine import FileLoadError, ModelNotLoadedError, ValidationError
 from hydraulic_engine.swmm import (
     SwmmRunner,
+    SwmmRunResult,
     SwmmInpHandler,
     SwmmRptHandler,
     SwmmOutHandler,
+    SwmmFileHandler,
     SwmmOtherSettings,
     SwmmControl,
 )
@@ -64,8 +66,8 @@ class TestSwmmImports:
         assert swmm.SwmmRptHandler is not None
 
     def test_import_result_classes(self):
-        from hydraulic_engine.swmm.runner import SwmmRunResult
         assert SwmmRunResult is not None
+        assert SwmmFileHandler is not None
 
 
 class TestSwmmRunner:

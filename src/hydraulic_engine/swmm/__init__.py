@@ -18,8 +18,9 @@ from ..exceptions import (
     APIError,
     ExportError,
     SimulationError,
+    SimulationCancelled,
 )
-from .runner import SwmmRunner
+from .runner import SwmmRunner, SwmmRunResult
 from .inp_handler import SwmmInpHandler
 from .rpt_handler import SwmmRptHandler
 from .out_handler import SwmmOutHandler
@@ -44,8 +45,10 @@ __all__ = [
     "APIError",
     "ExportError",
     "SimulationError",
+    "SimulationCancelled",
     # Handlers and Runner
     "SwmmRunner",
+    "SwmmRunResult",
     "SwmmInpHandler",
     "SwmmRptHandler",
     "SwmmOutHandler",

@@ -14,6 +14,7 @@ from hydraulic_engine.epanet import (
     EpanetRunner,
     EpanetInpHandler,
     EpanetBinHandler,
+    EpanetFileHandler,
     EpanetRunResult,
     EpanetOtherSettings,
     EpanetControl,
@@ -66,6 +67,9 @@ class TestEpanetImports:
         assert EpanetRunner is not None
         assert epanet.EpanetInpHandler is not None
         assert epanet.EpanetBinHandler is not None
+        assert epanet.EpanetFileHandler is not None
+        assert EpanetFileHandler is not None
+        assert EpanetRunResult is not None
 
     def test_import_exceptions_from_epanet(self):
         from hydraulic_engine.epanet import ModelNotLoadedError, ValidationError

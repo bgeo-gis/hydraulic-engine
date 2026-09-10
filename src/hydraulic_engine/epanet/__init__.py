@@ -18,10 +18,12 @@ from ..exceptions import (
     APIError,
     ExportError,
     SimulationError,
+    SimulationCancelled,
 )
 from .runner import EpanetRunner, EpanetRunResult
 from .inp_handler import EpanetInpHandler
 from .bin_handler import EpanetBinHandler
+from .file_handler import EpanetFileHandler
 
 # Model classes
 from .models import (
@@ -81,11 +83,13 @@ __all__ = [
     "APIError",
     "ExportError",
     "SimulationError",
+    "SimulationCancelled",
     # Handlers and Runner
     "EpanetRunner",
     "EpanetRunResult",
     "EpanetInpHandler",
     "EpanetBinHandler",
+    "EpanetFileHandler",
     # Base
     "EpanetBaseObject",
     # Enums - Features

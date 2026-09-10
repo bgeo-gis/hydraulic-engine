@@ -15,10 +15,11 @@ from hydraulic_engine import (
     APIError,
     ExportError,
     SimulationError,
+    SimulationCancelled,
 )
 from hydraulic_engine.epanet import EpanetInpHandler
 from hydraulic_engine.swmm import SwmmInpHandler, SwmmRptHandler
-from hydraulic_engine.utils import tools_config, tools_os
+from hydraulic_engine.utils import tools_os
 
 
 class TestExceptionHierarchy:
@@ -35,6 +36,7 @@ class TestExceptionHierarchy:
             APIError,
             ExportError,
             SimulationError,
+            SimulationCancelled,
         ):
             assert issubclass(exc_cls, HydraulicEngineError)
             assert issubclass(exc_cls, Exception)
@@ -97,10 +99,6 @@ class TestSwmmErrorHandling:
 
 class TestUtilsErrorHandling:
     """Test utility modules raise on failure."""
-
-    def test_tools_config_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            tools_config.load_config("test")
 
     def test_ensure_dir_invalid_path_raises(self, tmp_path):
         invalid = str(tmp_path / "nested" / "dir")

@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| Testing | [![CI - Test](https://github.com/Giswater/hydraulic_engine/actions/workflows/publish-to-pypi.yml/badge.svg)](https://github.com/Giswater/hydraulic_engine/actions/workflows/publish-to-pypi.yml) |
-| Package | [![PyPI Latest Release](https://img.shields.io/pypi/v/hydraulic_engine.svg)](https://pypi.org/project/hydraulic_engine/) [![PyPI Downloads](https://img.shields.io/pypi/dm/hydraulic_engine.svg?label=PyPI%20downloads)](https://pypi.org/project/hydraulic_engine/) |
-| Meta | [![License - GNU GPL3](https://img.shields.io/pypi/l/hydraulic_engine.svg)](https://github.com/Giswater/hydraulic_engine/blob/main/LICENSE) |
+| Testing | [![CI - Test](https://github.com/bgeo-gis/hydraulic-engine/actions/workflows/test.yml/badge.svg)](https://github.com/bgeo-gis/hydraulic-engine/actions/workflows/test.yml) |
+| Package | [![PyPI Latest Release](https://img.shields.io/pypi/v/hydraulic-engine.svg)](https://pypi.org/project/hydraulic-engine/) [![PyPI Downloads](https://img.shields.io/pypi/dm/hydraulic-engine.svg?label=PyPI%20downloads)](https://pypi.org/project/hydraulic-engine/) |
+| Meta | [![License - GNU GPL3](https://img.shields.io/pypi/l/hydraulic-engine.svg)](https://github.com/bgeo-gis/hydraulic-engine/blob/main/LICENSE) |
 
 Python toolkit to run **SWMM** and **EPANET** simulations, work with their input and result files, and export results to a Giswater PostgreSQL database or a FROST SensorThings endpoint.
 
@@ -25,7 +25,7 @@ pip install hydraulic-engine
 From source:
 
 ```bash
-git clone https://github.com/Giswater/hydraulic-engine.git
+git clone https://github.com/bgeo-gis/hydraulic-engine.git
 cd hydraulic-engine
 pip install -e .
 ```
