@@ -19,8 +19,19 @@ from hydraulic_engine.epanet import (
     EpanetOtherSettings,
     EpanetControl,
     EpanetRule,
+    EpanetFeatureSettings,
+    EpanetJunction,
+    EpanetDemand,
+    EpanetPipe,
+    EpanetValve,
+    EpanetValveType,
+    EpanetOptionsSettings,
+    EpanetHydraulicOptions,
+    EpanetHeadlossFormula,
+    EpanetFlowUnits,
 )
 from hydraulic_engine.utils.enums import RunStatus
+from wntr.epanet.util import FlowUnits, HydParam, to_si
 
 
 _MINIMAL_EPANET_INP = """[TITLE]
@@ -51,11 +62,67 @@ Headloss H-W
 2 0 1
 """
 
+_VALVES_EPANET_INP = """[TITLE]
+Valves
+[JUNCTIONS]
+J1 100 0
+J2 90 0
+[RESERVOIRS]
+R1 120
+[PIPES]
+P1 R1 J1 500 300 110 0 Open
+[VALVES]
+PRV1 J1 J2 200 PRV 40 0
+TCV1 J1 J2 200 TCV 0.5 0
+FCV1 J1 J2 200 FCV 5 0
+[TIMES]
+Duration 0
+[OPTIONS]
+Units LPS
+Headloss H-W
+[COORDINATES]
+J1 0 0
+J2 1 0
+R1 -1 0
+"""
+
+_GPM_EPANET_INP = """[TITLE]
+GPM
+[JUNCTIONS]
+J1 100 0
+[RESERVOIRS]
+R1 120
+[PIPES]
+P1 R1 J1 1000 12 100 0 Open
+[TIMES]
+Duration 0
+[OPTIONS]
+Units GPM
+Headloss H-W
+[COORDINATES]
+J1 0 0
+R1 1 0
+"""
+
 
 @pytest.fixture
 def minimal_epanet_inp(tmp_path):
     path = tmp_path / "minimal.inp"
     path.write_text(_MINIMAL_EPANET_INP, encoding="utf-8")
+    return str(path)
+
+
+@pytest.fixture
+def valves_epanet_inp(tmp_path):
+    path = tmp_path / "valves.inp"
+    path.write_text(_VALVES_EPANET_INP, encoding="utf-8")
+    return str(path)
+
+
+@pytest.fixture
+def gpm_epanet_inp(tmp_path):
+    path = tmp_path / "gpm.inp"
+    path.write_text(_GPM_EPANET_INP, encoding="utf-8")
     return str(path)
 
 
@@ -320,3 +387,131 @@ class TestEpanetBinHandler:
         inp = EpanetInpHandler()
         with pytest.raises(ModelNotLoadedError):
             handler.export_to_database(result_id="1", inp_handler=inp)
+
+
+class TestEpanetUnitConversion:
+    """Test INP-unit -> SI conversion on update_inp_from_settings."""
+
+    def test_lps_demand_and_get_demands(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=EpanetFeatureSettings(
+                junctions={
+                    "11": EpanetJunction(
+                        demand_list=[EpanetDemand(base_demand=10.0, category="base")]
+                    )
+                }
+            )
+        )
+
+        junction = handler.file_object.get_node("11")
+        assert junction.demand_timeseries_list[0].base_value == pytest.approx(0.01)
+
+        demands = handler.get_demands()
+        assert demands["units"] == "LPS"
+        assert demands["junctions"]["11"]["demand_list"][0]["base_demand"] == pytest.approx(
+            10.0
+        )
+        assert demands["junctions"]["11"]["demand_list"][0]["category"] == "base"
+
+    def test_lps_pipe_diameter(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=EpanetFeatureSettings(
+                pipes={"10": EpanetPipe(diameter=450.0)}
+            )
+        )
+        assert handler.file_object.get_link("10").diameter == pytest.approx(0.45)
+
+    def test_roughness_hw_unchanged_dw_converted(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=EpanetFeatureSettings(
+                pipes={"10": EpanetPipe(roughness=110.0)}
+            )
+        )
+        assert handler.file_object.get_link("10").roughness == pytest.approx(110.0)
+
+        handler.update_inp_from_settings(
+            options_settings=EpanetOptionsSettings(
+                hydraulic=EpanetHydraulicOptions(
+                    headloss=EpanetHeadlossFormula.D_W
+                )
+            ),
+            feature_settings=EpanetFeatureSettings(
+                pipes={"10": EpanetPipe(roughness=0.1)}
+            ),
+        )
+        expected = float(
+            to_si(FlowUnits.LPS, 0.1, HydParam.RoughnessCoeff, darcy_weisbach=True)
+        )
+        assert handler.file_object.get_link("10").roughness == pytest.approx(expected)
+        assert handler.file_object.options.hydraulic.headloss == "D-W"
+
+    def test_valve_initial_setting_by_type(self, valves_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(valves_epanet_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=EpanetFeatureSettings(
+                valves={
+                    "PRV1": EpanetValve(initial_setting=50.0),
+                    "TCV1": EpanetValve(initial_setting=0.75),
+                    "FCV1": EpanetValve(initial_setting=10.0),
+                }
+            )
+        )
+
+        # Metric pressure is identity (m)
+        assert handler.file_object.get_link("PRV1").initial_setting == pytest.approx(50.0)
+        assert handler.file_object.get_link("TCV1").initial_setting == pytest.approx(0.75)
+        assert handler.file_object.get_link("FCV1").initial_setting == pytest.approx(0.01)
+
+        # Explicit type from settings overrides / confirms conversion
+        handler.update_inp_from_settings(
+            feature_settings=EpanetFeatureSettings(
+                valves={
+                    "PRV1": EpanetValve(
+                        valve_type=EpanetValveType.PRV, initial_setting=25.0
+                    ),
+                }
+            )
+        )
+        assert handler.file_object.get_link("PRV1").initial_setting == pytest.approx(25.0)
+
+    def test_gpm_elevation_converted(self, gpm_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(gpm_epanet_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=EpanetFeatureSettings(
+                junctions={"J1": EpanetJunction(elevation=10.0)}
+            )
+        )
+        expected = float(to_si(FlowUnits.GPM, 10.0, HydParam.Elevation))
+        assert handler.file_object.get_node("J1").elevation == pytest.approx(expected)
+
+    def test_options_pressure_converted_after_units(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+
+        # Switch to GPM then set pressure in psi (INP units for GPM)
+        handler.update_inp_from_settings(
+            options_settings=EpanetOptionsSettings(
+                hydraulic=EpanetHydraulicOptions(
+                    inpfile_units=EpanetFlowUnits.GPM,
+                    minimum_pressure=14.5,
+                )
+            )
+        )
+        expected = float(to_si(FlowUnits.GPM, 14.5, HydParam.Pressure))
+        assert handler.file_object.options.hydraulic.minimum_pressure == pytest.approx(
+            expected
+        )
+        assert handler.file_object.options.hydraulic.inpfile_units == "GPM"

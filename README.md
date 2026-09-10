@@ -6,14 +6,14 @@
 | Package | [![PyPI Latest Release](https://img.shields.io/pypi/v/hydraulic-engine.svg)](https://pypi.org/project/hydraulic-engine/) [![PyPI Downloads](https://img.shields.io/pypi/dm/hydraulic-engine.svg?label=PyPI%20downloads)](https://pypi.org/project/hydraulic-engine/) |
 | Meta | [![License - GNU GPL3](https://img.shields.io/pypi/l/hydraulic-engine.svg)](https://github.com/bgeo-gis/hydraulic-engine/blob/main/LICENSE) |
 
-Python toolkit to run **SWMM** and **EPANET** simulations, work with their input and result files, and export results to a Giswater PostgreSQL database or a FROST SensorThings endpoint.
+Python toolkit to run **SWMM** and **EPANET** simulations, work with their input and result files, and export results to PostgreSQL or a FROST SensorThings endpoint.
 
 ## Features
 
 - Run SWMM (pyswmm) and EPANET (WNTR) simulations, with optional progress callbacks
 - Read and write SWMM / EPANET INP models
 - Read SWMM RPT and OUT results, and EPANET BIN results
-- Export simulation results to PostgreSQL (Giswater) or FROST
+- Export simulation results to PostgreSQL or FROST
 - Connect to PostgreSQL, SQLite, and GeoPackage
 
 ## Installation

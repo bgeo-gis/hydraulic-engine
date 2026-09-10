@@ -134,8 +134,11 @@ class SwmmInpHandler(SwmmFileHandler):
     ) -> None:
         """
         Update INP file with provided settings.
-        Only updates fields that are not None.
-        
+
+        Values are written as-is in SWMM INP / FLOW_UNITS units (no SI
+        conversion). See ``docs/units.md``. Only fields that are not None
+        are updated.
+
         :param feature_settings: Feature settings to update
         :param options_settings: Options settings to update
         :param other_settings: Other settings to update

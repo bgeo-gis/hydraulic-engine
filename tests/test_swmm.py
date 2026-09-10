@@ -19,6 +19,10 @@ from hydraulic_engine.swmm import (
     SwmmFileHandler,
     SwmmOtherSettings,
     SwmmControl,
+    SwmmFeatureSettings,
+    SwmmOptionsSettings,
+    SwmmJunction,
+    SwmmFlowUnits,
 )
 from hydraulic_engine.utils.enums import RunStatus
 
@@ -302,6 +306,24 @@ class TestSwmmControls:
                     }
                 )
             )
+
+
+class TestSwmmSettingsPassthrough:
+    """SWMM settings stay in INP / FLOW_UNITS units (no SI conversion)."""
+
+    def test_junction_elevation_and_flow_units_unchanged(self, minimal_swmm_inp):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(
+                junctions={"J1": SwmmJunction(elevation=12.5)}
+            ),
+            options_settings=SwmmOptionsSettings(flow_units=SwmmFlowUnits.CFS),
+        )
+
+        assert handler.file_object.JUNCTIONS["J1"].elevation == 12.5
+        assert handler.file_object.OPTIONS["FLOW_UNITS"] == "CFS"
 
 
 class TestSwmmRptHandler:

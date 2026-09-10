@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add EPANET INP→SI unit conversion helpers (`epanet/units.py`) and
+  `EpanetInpHandler.get_demands()` returning junction demands in INP units.
+- Document EPANET vs SWMM settings unit contracts in `docs/units.md`.
+
+### Changed
+
+- EPANET `update_inp_from_settings` applies options before features so
+  `inpfile_units` / `headloss` from the same call govern feature conversion.
+
+### Fixed
+
+- EPANET `update_inp_from_settings` converts INP-unit feature and pressure
+  option values to SI with WNTR `to_si` / `HydParam` (including conditional
+  D-W roughness, typed valve settings, and curve point axes).
+
 ## [0.8.0] - 2026-09-10
 
 ### Added
@@ -19,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Align public EPANET/SWMM exports: `SwmmRunResult`, `EpanetFileHandler`, and `SimulationCancelled` are now part of the package API.
 - Re-export `config` explicitly from `hydraulic_engine.config` for a clearer import surface.
-- Hybrid `run()` error contract: `SimulationCancelled` / `SimulationError` (with optional `.result`) are raised for cancel and engine crashes; RPT/output `SUCCESS`/`WARNING`/`ERROR` still return a result. Giswater should catch `SimulationCancelled` for clean cancel UX.
+- Hybrid `run()` error contract: `SimulationCancelled` / `SimulationError` (with optional `.result`) are raised for cancel and engine crashes; RPT/output `SUCCESS`/`WARNING`/`ERROR` still return a result. Callers should catch `SimulationCancelled` for clean cancel UX.
 - `validate_inp` raises `ModelNotLoadedError` / `FileLoadError` instead of returning an invalid dict for missing state/path.
 - `EpanetRunner.export_result` types `client` as `HePgDao | HeFrostClient` (DATABASE vs FROST).
 
@@ -39,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add SWMM export to Giswater PostgreSQL via `SwmmRunner.export_result`, `SwmmRptHandler.export_to_database`, and `SwmmOutHandler.export_to_database`.
+- Add SWMM export to PostgreSQL via `SwmmRunner.export_result`, `SwmmRptHandler.export_to_database`, and `SwmmOutHandler.export_to_database`.
 - Add shared SWMM export helpers in `swmm/export_db.py` (report selection, COPY streaming, clean/finalize).
 - Add `SwmmInpHandler.get_report_element_selection()` so OUT time series follow the INP `[REPORT]` NODES / LINKS / SUBCATCHMENTS settings.
 - Add SWMM and EPANET export tests.
@@ -103,7 +120,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Make package compatible with Python 3.9
-- Make export to database for EPANET compatible with Giswater 3.5
+- Make export to database for EPANET compatible with schema version 3.5
 
 ## [0.2.0] - 2026-01-22
 

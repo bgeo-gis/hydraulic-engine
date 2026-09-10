@@ -24,11 +24,19 @@ from typing import Any, Dict, Optional
 from dataclasses import fields, is_dataclass
 from wntr.network.controls import _ControlType
 from wntr.epanet.io import _EpanetRule
+from wntr.epanet.util import HydParam
 from .file_handler import EpanetFileHandler
 from .models import (
     EpanetFeatureSettings,
     EpanetOptionsSettings,
     EpanetOtherSettings,
+)
+from .units import (
+    convert_demand_base,
+    convert_feature_value,
+    convert_from_si,
+    convert_option_value,
+    get_flow_units,
 )
 from ..utils import tools_log
 from ..exceptions import FileLoadError, FileWriteError, ModelNotLoadedError, ValidationError
@@ -56,8 +64,9 @@ _OTHER_CONFIG = {
 # Attributes that require special handling (not direct assignment)
 _SPECIAL_ATTRS = {'demand_list'}
 
-# Attributes to skip (internal/computed, not settable)
-_SKIP_ATTRS = {'node_type', 'link_type'}
+# Attributes to skip (internal/computed, not settable on WNTR objects).
+# valve_type is kept on settings models only to resolve initial_setting units.
+_SKIP_ATTRS = {'node_type', 'link_type', 'valve_type'}
 
 
 def _require_inp_loaded(handler: "EpanetInpHandler") -> wntr.network.WaterNetworkModel:
@@ -193,8 +202,15 @@ class EpanetInpHandler(EpanetFileHandler):
     ) -> None:
         """
         Update INP file with provided settings.
-        Only updates fields that are not None.
-        
+
+        Callers pass values in EPANET INP file units (``inpfile_units``).
+        Numeric hydraulic fields are converted to SI with WNTR ``to_si`` before
+        they are applied to the in-memory network. See ``docs/units.md``.
+
+        Options are applied before features so that ``inpfile_units`` and
+        ``headloss`` from the same call govern feature conversion (e.g. D-W
+        roughness). Only non-None fields are updated.
+
         :param feature_settings: Feature settings to update (junctions, pipes, etc.)
         :param options_settings: Options settings to update (simulation parameters)
         :param other_settings: Other settings to update (patterns, curves, controls, rules)
@@ -203,11 +219,12 @@ class EpanetInpHandler(EpanetFileHandler):
 
         validation_errors: list[str] = []
 
-        if feature_settings:
-            self._update_features(feature_settings, validation_errors)
-
+        # Options first: units/headloss must be current for feature conversion.
         if options_settings:
             self._update_options(options_settings)
+
+        if feature_settings:
+            self._update_features(feature_settings, validation_errors)
 
         if other_settings:
             self._update_other_settings(other_settings, validation_errors)
@@ -262,10 +279,14 @@ class EpanetInpHandler(EpanetFileHandler):
         """
         Update target WNTR object attributes from source model object.
         Only updates attributes that are not None in source object.
-        
+        Numeric hydraulic fields are converted from INP units to SI.
+
         :param target_obj: WNTR object to update
         :param source_obj: Model object with new values
         """
+        wn = self.file_object
+        flow_units = get_flow_units(wn)
+
         # Use dataclass fields if available, otherwise use dir()
         if is_dataclass(source_obj):
             attr_names = [f.name for f in fields(source_obj)]
@@ -282,12 +303,23 @@ class EpanetInpHandler(EpanetFileHandler):
 
             # Handle special attributes
             if attr_name in _SPECIAL_ATTRS:
-                self._handle_special_attribute(target_obj, attr_name, value)
+                self._handle_special_attribute(
+                    target_obj, attr_name, value, flow_units
+                )
                 continue
 
             # Convert enum to value if needed
             if hasattr(value, 'value'):
                 value = value.value
+
+            value = convert_feature_value(
+                attr_name,
+                value,
+                flow_units=flow_units,
+                wn=wn,
+                source_obj=source_obj,
+                target_obj=target_obj,
+            )
 
             # Attribute names match WNTR directly - set if it exists on target
             if hasattr(target_obj, attr_name):
@@ -303,14 +335,15 @@ class EpanetInpHandler(EpanetFileHandler):
                         validation_errors.append(msg)
 
     def _handle_special_attribute(
-        self, target_obj, attr_name: str, value
+        self, target_obj, attr_name: str, value, flow_units
     ) -> None:
         """
         Handle special attributes that require custom logic.
-        
+
         :param target_obj: WNTR object to update
         :param attr_name: Attribute name from model
-        :param value: Value to set
+        :param value: Value to set (INP units)
+        :param flow_units: EPANET FlowUnits for conversion
         """
 
         if attr_name == 'demand_list':
@@ -318,13 +351,21 @@ class EpanetInpHandler(EpanetFileHandler):
             if hasattr(target_obj, 'demand_timeseries_list'):
                 target_obj.demand_timeseries_list.clear()
                 for demand in value:
-                    target_obj.add_demand(demand.base_demand, pattern_name=demand.pattern_name, category=demand.category)
+                    base_si = convert_demand_base(flow_units, demand.base_demand)
+                    target_obj.add_demand(
+                        base_si,
+                        pattern_name=demand.pattern_name,
+                        category=demand.category,
+                    )
 
     def _update_options(self, options_settings: EpanetOptionsSettings) -> None:
         """
         Update INP options from options settings.
-        
+
         Options are organized in sections that mirror WNTR's options structure.
+        ``inpfile_units`` is applied before other hydraulic fields so pressure
+        conversion uses the updated unit system. Pressure options are converted
+        from INP units to SI.
         """
         wn = self.file_object
         options = wn.options
@@ -334,6 +375,18 @@ class EpanetInpHandler(EpanetFileHandler):
             section_names = [f.name for f in fields(options_settings)]
         else:
             section_names = [a for a in dir(options_settings) if not a.startswith('_')]
+
+        # Apply inpfile_units first so subsequent to_si uses the new system.
+        hydraulic_settings = getattr(options_settings, 'hydraulic', None)
+        if hydraulic_settings is not None:
+            units_value = getattr(hydraulic_settings, 'inpfile_units', None)
+            if units_value is not None:
+                if hasattr(units_value, 'value'):
+                    units_value = units_value.value
+                if hasattr(options.hydraulic, 'inpfile_units'):
+                    options.hydraulic.inpfile_units = units_value
+
+        flow_units = get_flow_units(wn)
 
         for section_name in section_names:
             section_settings = getattr(options_settings, section_name, None)
@@ -351,6 +404,10 @@ class EpanetInpHandler(EpanetFileHandler):
                 attr_names = [a for a in dir(section_settings) if not a.startswith('_')]
 
             for attr_name in attr_names:
+                # Already applied above
+                if section_name == 'hydraulic' and attr_name == 'inpfile_units':
+                    continue
+
                 value = getattr(section_settings, attr_name, None)
                 if value is None:
                     continue
@@ -358,6 +415,10 @@ class EpanetInpHandler(EpanetFileHandler):
                 # Convert enum to value if needed
                 if hasattr(value, 'value'):
                     value = value.value
+
+                value = convert_option_value(
+                    section_name, attr_name, value, flow_units
+                )
 
                 # Set attribute if it exists on WNTR section
                 if hasattr(wntr_section, attr_name):
@@ -544,6 +605,45 @@ class EpanetInpHandler(EpanetFileHandler):
     def get_options(self) -> Any:
         """Get OPTIONS object."""
         return _require_inp_loaded(self).options
+
+    def get_demands(self) -> Dict[str, Any]:
+        """
+        Get junction demands in EPANET INP file units.
+
+        WNTR stores demands in SI; values are converted with ``from_si``.
+
+        :return: Dict with ``units`` (inpfile_units string) and ``junctions``
+            mapping junction id -> ``demand_list`` of base_demand / pattern /
+            category entries.
+        """
+        wn = _require_inp_loaded(self)
+        flow_units = get_flow_units(wn)
+        junctions: Dict[str, Any] = {}
+
+        for name in wn.junction_name_list:
+            node = wn.get_node(name)
+            demand_list = []
+            for demand in node.demand_timeseries_list:
+                pattern_name = None
+                if demand.pattern_name is not None:
+                    pattern_name = demand.pattern_name
+                elif getattr(demand, "pattern", None) is not None:
+                    pattern_name = getattr(demand.pattern, "name", None)
+                demand_list.append(
+                    {
+                        "base_demand": convert_from_si(
+                            flow_units, float(demand.base_value), HydParam.Demand
+                        ),
+                        "pattern_name": pattern_name,
+                        "category": getattr(demand, "category", None),
+                    }
+                )
+            junctions[name] = {"demand_list": demand_list}
+
+        return {
+            "units": wn.options.hydraulic.inpfile_units,
+            "junctions": junctions,
+        }
 
     # =========================================================================
     # Count Methods
