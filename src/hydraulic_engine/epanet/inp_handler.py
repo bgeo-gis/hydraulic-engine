@@ -23,7 +23,7 @@ import wntr
 from typing import Any, Dict, Optional
 from dataclasses import fields, is_dataclass
 from wntr.network.controls import _ControlType
-from wntr.epanet.io import _EpanetRule
+from wntr.epanet.io import _EpanetRule, _read_control_line
 from wntr.epanet.util import HydParam
 from .file_handler import EpanetFileHandler
 from .models import (
@@ -489,9 +489,13 @@ class EpanetInpHandler(EpanetFileHandler):
 
             text = str(text).strip()
             try:
+                flow_units = get_flow_units(wn)
+                control_obj = _read_control_line(text, wn, flow_units, name)
+                if control_obj is None:
+                    raise ValueError("no control parsed from text")
                 if name in wn.control_name_list:
                     wn.remove_control(name)
-                wn.add_control(name, text)
+                wn.add_control(name, control_obj)
             except Exception as e:
                 msg = f"Failed to set control '{name}': {e}"
                 tools_log.log_warning(msg)
@@ -516,8 +520,11 @@ class EpanetInpHandler(EpanetFileHandler):
                 continue
 
             try:
+                flow_units = get_flow_units(wn)
                 lines = _normalize_rule_text(name, str(text))
-                parsed = _EpanetRule.parse_rules_lines(lines)
+                parsed = _EpanetRule.parse_rules_lines(
+                    lines, flow_units=flow_units
+                )
                 if not parsed:
                     raise ValueError("no rule parsed from text")
                 if len(parsed) > 1:

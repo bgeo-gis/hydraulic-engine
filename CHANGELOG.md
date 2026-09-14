@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - EPANET `update_inp_from_settings` converts INP-unit feature and pressure
   option values to SI with WNTR `to_si` / `HydParam` (including conditional
   D-W roughness, typed valve settings, and curve point axes).
+- EPANET controls/rules text now uses network `inpfile_units` via WNTR INP
+  parsers (aligned with feature settings and INP file units).
+
+### Migration note
+- Callers must pass EPANET settings in **INP file units** (same as the
+  network `UNITS` / `inpfile_units`), not SI. Values that were previously
+  treated as SI will now be converted and will be wrong if already SI.
+  SWMM settings remain unchanged (passthrough in `FLOW_UNITS`).
+  See `docs/units.md`.
 
 ## [0.8.0] - 2026-09-10
 

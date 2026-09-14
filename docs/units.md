@@ -74,11 +74,20 @@ Resolve `curve_type` from settings else the existing curve (`PUMP` treated as
 | EFFICIENCY | Flow | Unchanged (percent) |
 | Unknown | No conversion | No conversion |
 
+## EPANET: controls and rules
+
+`EpanetControl.text` and `EpanetRule.text` are **EPANET INP syntax** in the
+network ``inpfile_units`` (same as ``[CONTROLS]`` / ``[RULES]`` in the file).
+
+On apply, WNTR parsers (`_read_control_line`, `_EpanetRule.parse_rules_lines`)
+convert numeric thresholds to SI by attribute (pressure, level, flow, valve
+setting type, etc.). Time-based clauses (`AT TIME`, `OPEN`/`CLOSED`) are not
+converted. Invalid INP syntax fails at WNTR parse time.
+
 ## EPANET: never convert
 
 `initial_status`, `cv`, `valve_type`, tags / names, `overflow`, `base_speed`,
-pump `initial_setting`, `minor_loss`, pattern multipliers, control / rule
-**text** (WNTR string API expects SI — existing contract), dimensionless
+pump `initial_setting`, `minor_loss`, pattern multipliers, dimensionless
 options (`specific_gravity`, `viscosity`, exponents, multipliers), times
 (already seconds), coordinates / vertices.
 

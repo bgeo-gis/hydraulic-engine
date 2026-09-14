@@ -372,6 +372,64 @@ class TestEpanetControlsAndRules:
             )
 
 
+class TestEpanetControlsRulesUnits:
+    """Controls/rules numeric thresholds use INP units via WNTR parsers."""
+
+    def test_tank_level_control_lps(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+
+        handler.update_inp_from_settings(
+            other_settings=EpanetOtherSettings(
+                controls={
+                    "c1": EpanetControl(
+                        text="LINK 9 CLOSED IF NODE 2 BELOW 10"
+                    ),
+                }
+            )
+        )
+        control = handler.get_controls()["c1"]
+        assert control._condition._threshold == pytest.approx(10.0)
+
+    def test_junction_pressure_control_gpm(self, gpm_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(gpm_epanet_inp)
+
+        handler.update_inp_from_settings(
+            other_settings=EpanetOtherSettings(
+                controls={
+                    "c1": EpanetControl(
+                        text="LINK P1 OPEN IF NODE J1 BELOW 14.5"
+                    ),
+                }
+            )
+        )
+        expected = float(to_si(FlowUnits.GPM, 14.5, HydParam.Pressure))
+        control = handler.get_controls()["c1"]
+        assert control._condition._threshold == pytest.approx(expected)
+        assert control._condition._threshold != pytest.approx(14.5)
+
+    def test_rule_level_threshold_lps(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+
+        handler.update_inp_from_settings(
+            other_settings=EpanetOtherSettings(
+                rules={
+                    "R1": EpanetRule(
+                        text=(
+                            "IF NODE 2 LEVEL ABOVE 5\n"
+                            "THEN PUMP 9 STATUS IS CLOSED\n"
+                            "PRIORITY 1"
+                        )
+                    ),
+                }
+            )
+        )
+        rule = handler.get_rules()["R1"]
+        assert rule._condition._threshold == pytest.approx(5.0)
+
+
 class TestEpanetBinHandler:
     """Test EpanetBinHandler class."""
 

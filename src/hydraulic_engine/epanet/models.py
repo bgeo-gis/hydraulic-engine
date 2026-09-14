@@ -689,7 +689,8 @@ class EpanetControl(EpanetBaseObject):
     """
     Simple EPANET [CONTROLS] entry as free-form INP text.
 
-    WNTR string API expects SI units, e.g.
+    Text must be valid EPANET INP syntax in the network ``inpfile_units``
+    (same as a ``[CONTROLS]`` line in the file), e.g.
     ``LINK pump1 OPEN AT TIME 6`` or
     ``LINK pump1 CLOSED IF NODE tank1 BELOW 10``.
 
@@ -708,7 +709,8 @@ class EpanetRule(EpanetBaseObject):
     ``RULE`` header, the dict key is prepended as ``RULE {name}``.
     The RULE id in the text must match the dict key when both are present.
 
-    WNTR string/rule parsing expects SI units for numeric thresholds.
+    Numeric thresholds in the text use the network ``inpfile_units`` (EPANET
+    INP syntax, parsed by WNTR the same way as reading a ``[RULES]`` block).
     """
     text: Optional[str] = None
 
