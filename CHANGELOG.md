@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-14
+
 ### Added
 
 - Add EPANET INP→SI unit conversion helpers (`epanet/units.py`) and
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - EPANET `update_inp_from_settings` applies options before features so
   `inpfile_units` / `headloss` from the same call govern feature conversion.
+- **Breaking change / Migration:** Callers must pass EPANET settings in **INP file units**
+  (the network `UNITS` / `inpfile_units`), not SI. **If the caller previously
+  converted INP values to SI before calling `update_inp_from_settings`, that
+  conversion should now be removed.** SWMM settings remain unchanged
+  (passthrough in `FLOW_UNITS`). See `docs/units.md`.
 
 ### Fixed
 
@@ -25,13 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   D-W roughness, typed valve settings, and curve point axes).
 - EPANET controls/rules text now uses network `inpfile_units` via WNTR INP
   parsers (aligned with feature settings and INP file units).
-
-### Migration note
-- Callers must pass EPANET settings in **INP file units** (same as the
-  network `UNITS` / `inpfile_units`), not SI. Values that were previously
-  treated as SI will now be converted and will be wrong if already SI.
-  SWMM settings remain unchanged (passthrough in `FLOW_UNITS`).
-  See `docs/units.md`.
 
 ## [0.8.0] - 2026-09-10
 
@@ -160,7 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for batch operations to efficiently create/update Things, Datastreams, and Observations
   - Integration with existing export framework (`ExportDataSource.FROST`)
 
-[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.8.0...main
+[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.9.0...main
+[0.8.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.5.0...v0.6.0
