@@ -259,3 +259,85 @@ def convert_option_value(
 def convert_demand_base(flow_units: FlowUnits, base_demand: float) -> float:
     """Convert junction base_demand from INP units to SI."""
     return convert_to_si(flow_units, float(base_demand), HydParam.Demand)
+
+
+def convert_valve_initial_setting_from_si(
+    flow_units: FlowUnits,
+    value: Any,
+    valve_type: Optional[str],
+) -> Any:
+    """Convert valve initial_setting from SI to INP units (inverse of to_si)."""
+    if not isinstance(value, (int, float)):
+        return value
+    if valve_type in _PRESSURE_VALVE_TYPES:
+        return convert_from_si(flow_units, float(value), HydParam.Pressure)
+    if valve_type in _FLOW_VALVE_TYPES:
+        return convert_from_si(flow_units, float(value), HydParam.Flow)
+    return float(value)
+
+
+def convert_diameter_from_si(
+    flow_units: FlowUnits,
+    value: float,
+    target_obj: Any,
+) -> float:
+    """Tank diameter uses TankDiameter; pipe/valve diameter uses PipeDiameter."""
+    if isinstance(target_obj, Tank):
+        return convert_from_si(flow_units, value, HydParam.TankDiameter)
+    return convert_from_si(flow_units, value, HydParam.PipeDiameter)
+
+
+def convert_feature_from_si(
+    attr_name: str,
+    value: Any,
+    *,
+    flow_units: FlowUnits,
+    wn,
+    target_obj: Any,
+) -> Any:
+    """
+    Convert a single WNTR feature attribute from SI to INP file units.
+
+    Returns the value unchanged when no conversion applies. Enums are left as-is
+    for the caller to stringify.
+    """
+    if value is None:
+        return None
+
+    if attr_name == "roughness":
+        if is_darcy_weisbach(wn) and isinstance(value, (int, float)):
+            return convert_from_si(
+                flow_units,
+                float(value),
+                HydParam.RoughnessCoeff,
+                darcy_weisbach=True,
+            )
+        return float(value) if isinstance(value, (int, float)) else value
+
+    if attr_name == "initial_setting":
+        if isinstance(target_obj, Valve):
+            valve_type = resolve_valve_type(None, target_obj)
+            return convert_valve_initial_setting_from_si(flow_units, value, valve_type)
+        return value
+
+    if attr_name == "diameter" and isinstance(value, (int, float)):
+        return convert_diameter_from_si(flow_units, float(value), target_obj)
+
+    param = _ALWAYS_CONVERT.get(attr_name)
+    if param is not None and isinstance(value, (int, float)):
+        return convert_from_si(flow_units, float(value), param)
+
+    return value
+
+
+def convert_option_from_si(
+    section_name: str,
+    attr_name: str,
+    value: Any,
+    flow_units: FlowUnits,
+) -> Any:
+    """Convert an options attribute from SI to INP units when mapped."""
+    param = _OPTIONS_CONVERT.get((section_name, attr_name))
+    if param is not None and isinstance(value, (int, float)):
+        return convert_from_si(flow_units, float(value), param)
+    return value

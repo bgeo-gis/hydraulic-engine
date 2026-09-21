@@ -474,6 +474,29 @@ class TestEpanetUnitConversion:
         )
         assert demands["junctions"]["11"]["demand_list"][0]["category"] == "base"
 
+    def test_get_objects_in_inp_units(self, minimal_epanet_inp):
+        import json
+
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+        objects = handler.get_objects()
+
+        # Must be JSON-serializable (no WNTR objects)
+        json.dumps(objects)
+
+        assert objects["units"] == "LPS"
+        assert objects["pipes"]["10"]["diameter"] == pytest.approx(450.0)
+        assert objects["pipes"]["10"]["length"] == pytest.approx(1000.0)
+        assert objects["pipes"]["10"]["roughness"] == pytest.approx(110.0)
+        assert objects["pipes"]["10"]["initial_status"] == "Open"
+        assert objects["junctions"]["11"]["elevation"] == pytest.approx(216.4)
+        assert objects["tanks"]["2"]["diameter"] == pytest.approx(15.2)
+        assert objects["time"]["duration"] == 3600
+        assert objects["options"]["hydraulic"]["inpfile_units"] == "LPS"
+        assert objects["options"]["hydraulic"]["headloss"] == "H-W"
+        assert "11" in objects["junctions"]
+        assert "9" in objects["pumps"]
+
     def test_lps_pipe_diameter(self, minimal_epanet_inp):
         handler = EpanetInpHandler()
         handler.load_file(minimal_epanet_inp)

@@ -33,8 +33,10 @@ from .models import (
 )
 from .units import (
     convert_demand_base,
+    convert_feature_from_si,
     convert_feature_value,
     convert_from_si,
+    convert_option_from_si,
     convert_option_value,
     get_flow_units,
 )
@@ -651,6 +653,363 @@ class EpanetInpHandler(EpanetFileHandler):
             "units": wn.options.hydraulic.inpfile_units,
             "junctions": junctions,
         }
+
+    def get_objects(self) -> Dict[str, Any]:
+        """
+        Serialize the loaded INP network to JSON-friendly dicts in INP file units.
+
+        WNTR stores the model in SI. Every numeric attribute that EPANET writes in
+        file units is converted with ``from_si`` / ``HydParam``. Return values are
+        plain primitives (float / str / None / list / dict) — never WNTR objects.
+
+        :return: Dict with ``units``, ``options`` (hydraulic/quality/energy/reaction),
+            ``time``, ``junctions``, ``reservoirs``, ``tanks``, ``pipes``, ``pumps``,
+            ``valves``, and ``patterns``.
+        """
+        wn = _require_inp_loaded(self)
+        flow_units = get_flow_units(wn)
+        return {
+            "units": wn.options.hydraulic.inpfile_units,
+            "options": self._serialize_options(wn, flow_units),
+            "time": self._serialize_time_options(wn),
+            "junctions": self._serialize_junctions(wn, flow_units),
+            "reservoirs": self._serialize_reservoirs(wn, flow_units),
+            "tanks": self._serialize_tanks(wn, flow_units),
+            "pipes": self._serialize_pipes(wn, flow_units),
+            "pumps": self._serialize_pumps(wn, flow_units),
+            "valves": self._serialize_valves(wn, flow_units),
+            "patterns": self._serialize_patterns(wn),
+        }
+
+    @staticmethod
+    def _status_name(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if hasattr(value, "name"):
+            return str(value.name)
+        return str(value)
+
+    @staticmethod
+    def _primitive(value: Any) -> Any:
+        if value is None:
+            return None
+        if hasattr(value, "value") and not isinstance(value, (str, bytes)):
+            # Enum-like (e.g. LinkStatus); prefer .name for status strings
+            name = getattr(value, "name", None)
+            if name is not None and not isinstance(value, (int, float)):
+                return name
+            return value.value
+        if isinstance(value, (str, int, float, bool)):
+            return value
+        return str(value)
+
+    def _attr_from_si(
+        self,
+        attr_name: str,
+        target_obj: Any,
+        *,
+        flow_units,
+        wn,
+    ) -> Any:
+        raw = getattr(target_obj, attr_name, None)
+        if raw is None:
+            return None
+        if attr_name in ("initial_status", "status"):
+            return self._status_name(raw)
+        if attr_name in (
+            "pump_type",
+            "valve_type",
+            "pump_curve_name",
+            "speed_pattern_name",
+            "vol_curve_name",
+            "head_pattern_name",
+            "mixing_model",
+        ):
+            return self._primitive(raw)
+        converted = convert_feature_from_si(
+            attr_name,
+            raw,
+            flow_units=flow_units,
+            wn=wn,
+            target_obj=target_obj,
+        )
+        if isinstance(converted, (int, float)):
+            return float(converted)
+        return self._primitive(converted)
+
+    def _serialize_junctions(self, wn, flow_units) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for name in wn.junction_name_list:
+            node = wn.get_node(name)
+            demand_list = []
+            for demand in node.demand_timeseries_list:
+                pattern_name = demand.pattern_name
+                if pattern_name is None and getattr(demand, "pattern", None) is not None:
+                    pattern_name = getattr(demand.pattern, "name", None)
+                demand_list.append(
+                    {
+                        "base_demand": convert_from_si(
+                            flow_units, float(demand.base_value), HydParam.Demand
+                        ),
+                        "pattern_name": pattern_name,
+                        "category": getattr(demand, "category", None),
+                    }
+                )
+            entry: Dict[str, Any] = {
+                "elevation": self._attr_from_si(
+                    "elevation", node, flow_units=flow_units, wn=wn
+                ),
+                "demand_list": demand_list,
+                "emitter_coefficient": self._attr_from_si(
+                    "emitter_coefficient", node, flow_units=flow_units, wn=wn
+                ),
+            }
+            out[name] = entry
+        return out
+
+    def _serialize_reservoirs(self, wn, flow_units) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for name in wn.reservoir_name_list:
+            node = wn.get_node(name)
+            out[name] = {
+                "base_head": self._attr_from_si(
+                    "base_head", node, flow_units=flow_units, wn=wn
+                ),
+                "head_pattern_name": self._primitive(
+                    getattr(node, "head_pattern_name", None)
+                ),
+            }
+        return out
+
+    def _serialize_tanks(self, wn, flow_units) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for name in wn.tank_name_list:
+            node = wn.get_node(name)
+            out[name] = {
+                "elevation": self._attr_from_si(
+                    "elevation", node, flow_units=flow_units, wn=wn
+                ),
+                "init_level": self._attr_from_si(
+                    "init_level", node, flow_units=flow_units, wn=wn
+                ),
+                "min_level": self._attr_from_si(
+                    "min_level", node, flow_units=flow_units, wn=wn
+                ),
+                "max_level": self._attr_from_si(
+                    "max_level", node, flow_units=flow_units, wn=wn
+                ),
+                "diameter": self._attr_from_si(
+                    "diameter", node, flow_units=flow_units, wn=wn
+                ),
+                "min_vol": self._attr_from_si(
+                    "min_vol", node, flow_units=flow_units, wn=wn
+                ),
+                "vol_curve_name": self._primitive(
+                    getattr(node, "vol_curve_name", None)
+                ),
+                "overflow": bool(getattr(node, "overflow", False)),
+            }
+        return out
+
+    def _serialize_pipes(self, wn, flow_units) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for name in wn.pipe_name_list:
+            link = wn.get_link(name)
+            out[name] = {
+                "start_node_name": link.start_node_name,
+                "end_node_name": link.end_node_name,
+                "length": self._attr_from_si(
+                    "length", link, flow_units=flow_units, wn=wn
+                ),
+                "diameter": self._attr_from_si(
+                    "diameter", link, flow_units=flow_units, wn=wn
+                ),
+                "roughness": self._attr_from_si(
+                    "roughness", link, flow_units=flow_units, wn=wn
+                ),
+                "minor_loss": float(link.minor_loss)
+                if getattr(link, "minor_loss", None) is not None
+                else None,
+                "initial_status": self._status_name(
+                    getattr(link, "initial_status", None)
+                ),
+                "check_valve": bool(getattr(link, "check_valve", False)),
+            }
+        return out
+
+    def _serialize_pumps(self, wn, flow_units) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for name in wn.pump_name_list:
+            link = wn.get_link(name)
+            out[name] = {
+                "start_node_name": link.start_node_name,
+                "end_node_name": link.end_node_name,
+                "pump_type": self._primitive(getattr(link, "pump_type", None)),
+                "pump_curve_name": self._primitive(
+                    getattr(link, "pump_curve_name", None)
+                ),
+                "power": self._attr_from_si(
+                    "power", link, flow_units=flow_units, wn=wn
+                )
+                if getattr(link, "power", None) not in (None, 0)
+                and str(getattr(link, "pump_type", "")).upper() == "POWER"
+                else None,
+                "base_speed": float(link.base_speed)
+                if getattr(link, "base_speed", None) is not None
+                else None,
+                "speed_pattern_name": self._primitive(
+                    getattr(link, "speed_pattern_name", None)
+                ),
+                "initial_status": self._status_name(
+                    getattr(link, "initial_status", None)
+                ),
+                "initial_setting": self._attr_from_si(
+                    "initial_setting", link, flow_units=flow_units, wn=wn
+                ),
+            }
+        return out
+
+    def _serialize_valves(self, wn, flow_units) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for name in wn.valve_name_list:
+            link = wn.get_link(name)
+            out[name] = {
+                "start_node_name": link.start_node_name,
+                "end_node_name": link.end_node_name,
+                "diameter": self._attr_from_si(
+                    "diameter", link, flow_units=flow_units, wn=wn
+                ),
+                "valve_type": self._primitive(getattr(link, "valve_type", None)),
+                "initial_setting": self._attr_from_si(
+                    "initial_setting", link, flow_units=flow_units, wn=wn
+                ),
+                "minor_loss": float(link.minor_loss)
+                if getattr(link, "minor_loss", None) is not None
+                else None,
+                "initial_status": self._status_name(
+                    getattr(link, "initial_status", None)
+                ),
+            }
+        return out
+
+    def _serialize_patterns(self, wn) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for name in wn.pattern_name_list:
+            pattern = wn.get_pattern(name)
+            multipliers = getattr(pattern, "multipliers", None)
+            if multipliers is None:
+                multipliers = list(pattern)
+            out[name] = {
+                "multipliers": [float(v) for v in multipliers],
+            }
+        return out
+
+    # WNTR reaction attrs that differ from EpanetReactionOptions field names
+    _REACTION_ATTR_ALIASES = {
+        "global_bulk": "bulk_coeff",
+        "global_wall": "wall_coeff",
+        "roughness_correlation": "roughness_correl",
+    }
+
+    def _serialize_options(self, wn, flow_units) -> Dict[str, Any]:
+        """Serialize hydraulic/quality/energy/reaction in INP units (model field names)."""
+        result: Dict[str, Any] = {}
+        for section_name, field_names in (
+            (
+                "hydraulic",
+                [
+                    "inpfile_units",
+                    "headloss",
+                    "specific_gravity",
+                    "viscosity",
+                    "trials",
+                    "accuracy",
+                    "unbalanced",
+                    "pattern",
+                    "demand_multiplier",
+                    "emitter_exponent",
+                    "demand_model",
+                    "minimum_pressure",
+                    "required_pressure",
+                    "pressure_exponent",
+                    "checkfreq",
+                    "maxcheck",
+                    "damplimit",
+                ],
+            ),
+            (
+                "quality",
+                ["mode", "parameter", "diffusivity", "tolerance"],
+            ),
+            (
+                "energy",
+                [
+                    "global_efficiency",
+                    "global_price",
+                    "global_pattern",
+                    "demand_charge",
+                ],
+            ),
+            (
+                "reaction",
+                [
+                    "bulk_order",
+                    "tank_order",
+                    "wall_order",
+                    "global_bulk",
+                    "global_wall",
+                    "limiting_potential",
+                    "roughness_correlation",
+                ],
+            ),
+        ):
+            wntr_section = getattr(wn.options, section_name, None)
+            if wntr_section is None:
+                continue
+            section_out: Dict[str, Any] = {}
+            for field_name in field_names:
+                wntr_attr = self._REACTION_ATTR_ALIASES.get(field_name, field_name)
+                if not hasattr(wntr_section, wntr_attr):
+                    continue
+                raw = getattr(wntr_section, wntr_attr)
+                if raw is None:
+                    continue
+                value = convert_option_from_si(
+                    section_name, field_name, raw, flow_units
+                )
+                section_out[field_name] = self._primitive(value)
+            if section_out:
+                result[section_name] = section_out
+        return result
+
+    def _serialize_time_options(self, wn) -> Dict[str, Any]:
+        """Serialize [TIMES] options (WNTR stores durations as seconds)."""
+        time_opts = wn.options.time
+        out: Dict[str, Any] = {}
+        for field_name in (
+            "duration",
+            "hydraulic_timestep",
+            "quality_timestep",
+            "pattern_timestep",
+            "pattern_start",
+            "report_timestep",
+            "report_start",
+            "start_clocktime",
+            "rule_timestep",
+            "statistic",
+        ):
+            if not hasattr(time_opts, field_name):
+                continue
+            raw = getattr(time_opts, field_name)
+            if raw is None:
+                continue
+            if field_name == "statistic":
+                out[field_name] = self._primitive(raw)
+            elif isinstance(raw, (int, float)):
+                out[field_name] = int(round(float(raw)))
+            else:
+                out[field_name] = self._primitive(raw)
+        return out
 
     # =========================================================================
     # Count Methods

@@ -32,6 +32,39 @@ def _get_section_dict(handler: "SwmmInpHandler", section_name: str) -> Dict[str,
     return dict(section) if section else {}
 
 
+def _to_plain(value: Any) -> Any:
+    """Recursively convert swmm-api objects to JSON-serializable primitives."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_to_plain(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _to_plain(v) for k, v in value.items()}
+    if hasattr(value, "__dict__"):
+        return {
+            str(k): _to_plain(v)
+            for k, v in vars(value).items()
+            if not str(k).startswith("_")
+        }
+    if hasattr(value, "value") and not isinstance(value, (bytes, bytearray)):
+        return _to_plain(value.value)
+    return str(value)
+
+
+def _serialize_section_map(handler: "SwmmInpHandler", section_name: str) -> Dict[str, Any]:
+    """Serialize a named INP section (id -> object) to plain dicts in INP units."""
+    raw = _get_section_dict(handler, section_name)
+    out: Dict[str, Any] = {}
+    for key, obj in raw.items():
+        plain = _to_plain(obj)
+        if isinstance(plain, dict):
+            plain.pop("name", None)
+            out[str(key)] = plain
+        else:
+            out[str(key)] = plain
+    return out
+
+
 class SwmmInpHandler(SwmmFileHandler):
     """
     Handler for SWMM INP files.
@@ -490,6 +523,47 @@ class SwmmInpHandler(SwmmFileHandler):
     # =========================================================================
     # Summary and Statistics
     # =========================================================================
+
+    def get_objects(self) -> Dict[str, Any]:
+        """
+        Serialize the loaded SWMM INP to JSON-friendly dicts in INP file units.
+
+        swmm-api already stores values in ``FLOW_UNITS`` (INP units), so no
+        SI conversion is applied. Return values are plain primitives — never
+        swmm-api section objects.
+
+        :return: Dict with ``units``, ``options``, and the main network sections.
+        """
+        inp = _require_inp_loaded(self)
+        options_raw = self.get_options()
+        options = _to_plain(options_raw) if options_raw else {}
+        units = None
+        if isinstance(options, dict):
+            units = options.get("FLOW_UNITS") or options.get("flow_units")
+
+        return {
+            "units": units,
+            "options": options if isinstance(options, dict) else {},
+            "junctions": _serialize_section_map(self, "JUNCTIONS"),
+            "outfalls": _serialize_section_map(self, "OUTFALLS"),
+            "storage": _serialize_section_map(self, "STORAGE"),
+            "dividers": _serialize_section_map(self, "DIVIDERS"),
+            "conduits": _serialize_section_map(self, "CONDUITS"),
+            "pumps": _serialize_section_map(self, "PUMPS"),
+            "orifices": _serialize_section_map(self, "ORIFICES"),
+            "weirs": _serialize_section_map(self, "WEIRS"),
+            "outlets": _serialize_section_map(self, "OUTLETS"),
+            "subcatchments": _serialize_section_map(self, "SUBCATCHMENTS"),
+            "xsections": _serialize_section_map(self, "XSECTIONS"),
+            "patterns": _serialize_section_map(self, "PATTERNS"),
+            "curves": _serialize_section_map(self, "CURVES"),
+            "timeseries": _serialize_section_map(self, "TIMESERIES"),
+            "raingages": _serialize_section_map(self, "RAINGAGES"),
+            "inflows": _serialize_section_map(self, "INFLOWS"),
+            "dwf": _serialize_section_map(self, "DWF"),
+            "title": self.get_title(),
+            "file": getattr(inp, "filename", None) or self.file_path,
+        }
 
     def get_summary(self) -> Dict[str, Any]:
         """

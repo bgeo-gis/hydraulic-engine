@@ -210,6 +210,20 @@ class TestSwmmInpHandler:
         with pytest.raises(ModelNotLoadedError):
             handler.get_junctions()
 
+    def test_get_objects_plain_dicts_in_inp_units(self, minimal_swmm_inp):
+        import json
+
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+        objects = handler.get_objects()
+        json.dumps(objects)
+
+        assert objects["units"] == "LPS"
+        assert "J1" in objects["junctions"]
+        assert objects["junctions"]["J1"]["elevation"] == pytest.approx(10.0)
+        assert "P1" in objects["pumps"]
+        assert isinstance(objects["options"], dict)
+
     def test_get_summary_not_loaded_empty_counts(self):
         handler = SwmmInpHandler()
         summary = handler.get_summary()

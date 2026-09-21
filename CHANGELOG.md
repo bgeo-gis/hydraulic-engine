@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `EpanetInpHandler.get_objects()` and `SwmmInpHandler.get_objects()` returning
+  JSON-serializable network + options dicts in **INP file units** (never raw
+  WNTR/swmm-api objects). EPANET converts SI→INP via `from_si` / `HydParam`.
+- Add `convert_feature_from_si` / `convert_option_from_si` helpers in
+  `epanet/units.py` (inverse of the existing to_si path).
+
 ## [0.9.0] - 2026-09-14
 
 ### Added

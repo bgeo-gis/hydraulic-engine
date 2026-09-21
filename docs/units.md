@@ -120,6 +120,34 @@ These need extra context in WNTR and are **not** converted in this release:
 }
 ```
 
+## Reading all objects (EPANET / SWMM)
+
+`EpanetInpHandler.get_objects()` and `SwmmInpHandler.get_objects()` return a
+JSON-serializable snapshot of the loaded INP in **file units**:
+
+- EPANET: WNTR SI → INP via `from_si` / `HydParam` (same rules as the write
+  path above). Values are primitives only — never WNTR `Node` / `Link` /
+  `Options` objects.
+- SWMM: swmm-api already stores INP units; objects are flattened to plain
+  dicts with no SI conversion.
+
+EPANET shape (abridged):
+
+```python
+{
+  "units": "LPS",
+  "options": {"hydraulic": {...}, "quality": {...}, "energy": {...}, "reaction": {...}},
+  "time": {"duration": 3600, ...},  # seconds
+  "junctions": {"N1": {"elevation": ..., "demand_list": [...], ...}},
+  "pipes": {"P1": {"diameter": ..., "length": ..., "roughness": ..., "initial_status": "Open", ...}},
+  "pumps": {...},
+  "valves": {...},
+  "reservoirs": {...},
+  "tanks": {...},
+  "patterns": {...},
+}
+```
+
 ## SWMM
 
 `SwmmInpHandler.update_inp_from_settings` writes feature and option values
