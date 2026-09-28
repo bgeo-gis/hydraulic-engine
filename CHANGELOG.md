@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- EPANET node statistics store the node elevation in `rpt_node_stats.top_elev`
+  (`elevation` on Giswater 3) instead of the maximum hydraulic head.
+
 ## [0.10.0] - 2026-09-21
 
 ### Added

@@ -701,7 +701,7 @@ def _export_node_stats(
             copy.write_row((
                 node_id,
                 result_id,
-                head_stats.get('max'),
+                prepared.top_elev.get(node_id),
                 demand_stats.get('max'),
                 demand_stats.get('min'),
                 demand_stats.get('avg'),
