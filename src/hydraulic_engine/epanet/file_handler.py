@@ -15,6 +15,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from ..utils import tools_log
+from ..utils.tools_exceptions import format_exception_chain
 from ..exceptions import FileLoadError, UnsupportedFileTypeError
 from os import PathLike
 
@@ -57,7 +58,7 @@ class EpanetFileHandler:
                     bin_file = BinFile()
                     bin_file.read(file_path)
                 except Exception as e:
-                    self.error_msg = f"Error reading {file_path}: {e}"
+                    self.error_msg = f"Error reading {file_path}: {format_exception_chain(e)}"
                     tools_log.log_error(self.error_msg)
                     raise FileLoadError(self.error_msg) from e
                 if bin_file.results is not None:
@@ -84,9 +85,10 @@ class EpanetFileHandler:
         except (FileLoadError, UnsupportedFileTypeError):
             raise
         except Exception as e:
-            self.error_msg = str(e)
-            tools_log.log_error(f"Error reading file: {e}")
-            raise FileLoadError(f"Error reading file '{file_path}': {e}") from e
+            detail = format_exception_chain(e)
+            self.error_msg = detail
+            tools_log.log_error(f"Error reading file: {detail}")
+            raise FileLoadError(f"Error reading file '{file_path}': {detail}") from e
 
     def is_loaded(self) -> bool:
         """Check if a file is loaded."""

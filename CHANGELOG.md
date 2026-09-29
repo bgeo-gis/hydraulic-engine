@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - EPANET node statistics store the node elevation in `rpt_node_stats.top_elev`
   (`elevation` on Giswater 3) instead of the maximum hydraulic head.
+- EPANET and SWMM load, write, validation and simulation errors (`FileLoadError`,
+  `FileWriteError`, `ValidationError`, `SimulationError`) now include the root cause from the
+  exception chain (e.g. `(Error 205) undefined time pattern, 'TEST' | (Error 200) one or more
+  errors in input file '...'`) instead of only the generic outer message. Added
+  `format_exception_chain` in `utils`.
+- EPANET and SWMM runners report numbered RPT error lines (`Error 205: ...`) in
+  `result.errors`, which the previous `error:` check missed.
 
 ## [0.10.0] - 2026-09-21
 
