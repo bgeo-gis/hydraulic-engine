@@ -16,6 +16,7 @@ from datetime import datetime
 
 from ..utils.enums import RunStatus, ExportDataSource
 from ..utils import tools_log
+from ..utils.tools_exceptions import RPT_ERROR_CODE_RE, collect_engine_failure
 from .bin_handler import EpanetBinHandler
 from .inp_handler import EpanetInpHandler
 from .models import EpanetFeatureSettings, EpanetOptionsSettings, EpanetOtherSettings
@@ -283,11 +284,11 @@ class EpanetRunner:
             raise
         except Exception as e:
             result.status = RunStatus.ERROR
-            result.errors.append(str(e))
+            detail = collect_engine_failure(e, result.errors, result.rpt_path, since=start_time - 1)
             result.duration_seconds = time.time() - start_time
             self.result = result
-            tools_log.log_error(f"EPANET simulation error: {e}")
-            raise SimulationError(f"EPANET simulation error: {e}", result=result) from e
+            tools_log.log_error(f"EPANET simulation error: {detail}")
+            raise SimulationError(f"EPANET simulation error: {detail}", result=result) from e
         finally:
             # Ensure EPANET is properly closed even on error
             if enData is not None:
@@ -440,7 +441,7 @@ class EpanetRunner:
                     result.errors.append("EPANET run was unsuccessful")
                     result.status = RunStatus.ERROR
 
-                if 'error' in line_lower and 'error:' in line_lower:
+                if 'error:' in line_lower or RPT_ERROR_CODE_RE.search(line_stripped):
                     result.errors.append(line_stripped)
                     result.status = RunStatus.ERROR
 

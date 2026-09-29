@@ -19,6 +19,7 @@ from .out_handler import SwmmOutHandler
 from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings
 from .inp_handler import SwmmInpHandler
 from ..utils import tools_log
+from ..utils.tools_exceptions import RPT_ERROR_CODE_RE, collect_engine_failure
 from ..utils.tools_api import HeFrostClient
 from ..utils.tools_db import HePgDao, get_connection
 from ..exceptions import (
@@ -331,11 +332,11 @@ class SwmmRunner:
 
         except Exception as e:
             result.status = RunStatus.ERROR
-            result.errors.append(str(e))
+            detail = collect_engine_failure(e, result.errors, result.rpt_path, since=start_time - 1)
             result.duration_seconds = time.time() - start_time
             self.result = result
-            tools_log.log_error(f"SWMM simulation error: {e}")
-            raise SimulationError(f"SWMM simulation error: {e}", result=result) from e
+            tools_log.log_error(f"SWMM simulation error: {detail}")
+            raise SimulationError(f"SWMM simulation error: {detail}", result=result) from e
 
     def _parse_rpt_status(self, result: SwmmRunResult) -> None:
         """
@@ -358,7 +359,7 @@ class SwmmRunner:
                     result.errors.append("SWMM run was unsuccessful")
                     result.status = RunStatus.ERROR
 
-                if 'error' in line_lower and 'error:' in line_lower:
+                if 'error:' in line_lower or RPT_ERROR_CODE_RE.search(line_stripped):
                     result.errors.append(line_stripped)
                     result.status = RunStatus.ERROR
 

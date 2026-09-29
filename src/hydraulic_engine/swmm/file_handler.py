@@ -16,6 +16,7 @@ from swmm_api import read_rpt_file
 from swmm_api import read_inp_file
 
 from ..utils import tools_log
+from ..utils.tools_exceptions import format_exception_chain
 from os import PathLike
 
 from ..exceptions import FileLoadError, UnsupportedFileTypeError
@@ -70,9 +71,10 @@ class SwmmFileHandler:
         except (FileLoadError, UnsupportedFileTypeError):
             raise
         except Exception as e:
-            self.error_msg = str(e)
-            tools_log.log_error(f"Error reading file: {e}")
-            raise FileLoadError(f"Error reading file '{file_path}': {e}") from e
+            detail = format_exception_chain(e)
+            self.error_msg = detail
+            tools_log.log_error(f"Error reading file: {detail}")
+            raise FileLoadError(f"Error reading file '{file_path}': {detail}") from e
 
     def is_loaded(self) -> bool:
         """Check if a file is loaded."""

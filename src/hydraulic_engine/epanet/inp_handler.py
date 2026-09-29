@@ -41,6 +41,7 @@ from .units import (
     get_flow_units,
 )
 from ..utils import tools_log
+from ..utils.tools_exceptions import format_exception_chain
 from ..exceptions import FileLoadError, FileWriteError, ModelNotLoadedError, ValidationError
 
 
@@ -143,9 +144,10 @@ class EpanetInpHandler(EpanetFileHandler):
             tools_log.log_info(f"Successfully wrote INP file: {path}")
             return True
         except Exception as e:
-            self.error_msg = str(e)
-            tools_log.log_error(f"Error writing INP file: {e}")
-            raise FileWriteError(f"Error writing INP file '{output_path or self.file_path}': {e}") from e
+            detail = format_exception_chain(e)
+            self.error_msg = detail
+            tools_log.log_error(f"Error writing INP file: {detail}")
+            raise FileWriteError(f"Error writing INP file '{output_path or self.file_path}': {detail}") from e
 
     def validate_inp(self) -> Dict[str, Any]:
         """
@@ -187,8 +189,9 @@ class EpanetInpHandler(EpanetFileHandler):
         except ValidationError:
             raise
         except Exception as e:
-            tools_log.log_error(f"INP validation failed: {e}")
-            raise ValidationError(f"INP validation failed for '{self.file_path}': {e}") from e
+            detail = format_exception_chain(e)
+            tools_log.log_error(f"INP validation failed: {detail}")
+            raise ValidationError(f"INP validation failed for '{self.file_path}': {detail}") from e
 
         return validation
 

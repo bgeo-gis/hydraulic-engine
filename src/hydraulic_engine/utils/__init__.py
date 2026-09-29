@@ -15,6 +15,7 @@ from .tools_api import HeApiClient, HeFrostClient, ApiType
 from .tools_api import create_frost_connection, get_api_client, close_api_client
 from .tools_log import set_logger, log_debug, log_info, log_warning, log_error, HeLogger
 from .tools_os import get_datadir
+from .tools_exceptions import format_exception_chain, extract_rpt_errors
 
 __all__ = [
     "ExportDataSource",
@@ -42,4 +43,6 @@ __all__ = [
     "log_error",
     "HeLogger",
     "get_datadir",
+    "format_exception_chain",
+    "extract_rpt_errors",
 ]
