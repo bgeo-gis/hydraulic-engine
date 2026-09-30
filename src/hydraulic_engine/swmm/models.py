@@ -92,7 +92,8 @@ class SwmmStorageKind(Enum):
     FUNCTIONAL = "FUNCTIONAL"
     CYLINDRICAL = "CYLINDRICAL"
     CONICAL = "CONICAL"
-    PARABOLID = "PARABOLID"
+    PARABOLID = "PARABOLID"  # misspelled; kept for backward compatibility
+    PARABOLOID = "PARABOLOID"
     PYRAMIDAL = "PYRAMIDAL"
 
 class SwmmPumpStatus(Enum):
@@ -130,10 +131,20 @@ class SwmmOutletCurveType(Enum):
     """
     Type of SWMM outlet curve.
     """
-    TABULAR_DEPTH = "TABULAR_DEPTH"
-    TABULAR_HEAD = "TABULAR_HEAD"
-    FUNCTIONAL_DEPTH = "FUNCTIONAL_DEPTH"
-    FUNCTIONAL_HEAD = "FUNCTIONAL_HEAD"
+    TABULAR_DEPTH = "TABULAR/DEPTH"
+    TABULAR_HEAD = "TABULAR/HEAD"
+    FUNCTIONAL_DEPTH = "FUNCTIONAL/DEPTH"
+    FUNCTIONAL_HEAD = "FUNCTIONAL/HEAD"
+
+    @classmethod
+    def _missing_(cls, value):
+        # Values are the INP keywords; accept the member names (``TABULAR_DEPTH``) used before.
+        if isinstance(value, str):
+            normalized = value.strip().upper().replace("_", "/")
+            for member in cls:
+                if member.value == normalized:
+                    return member
+        return None
 
 # endregion
 
@@ -283,11 +294,98 @@ class SwmmOutlet(SwmmLink):
 
 # endregion
 
+# region Hydrology and quality objects (create-or-replace)
+
+class SwmmInflowKind(Enum):
+    """
+    Kind of SWMM external inflow.
+    """
+    FLOW = "FLOW"
+    CONCEN = "CONCEN"
+    MASS = "MASS"
+
+class SwmmRaingageFormat(Enum):
+    """
+    Data format of a SWMM rain gage.
+    """
+    INTENSITY = "INTENSITY"
+    VOLUME = "VOLUME"
+    CUMULATIVE = "CUMULATIVE"
+
+class SwmmRaingageSource(Enum):
+    """
+    Data source of a SWMM rain gage.
+    """
+    TIMESERIES = "TIMESERIES"
+    FILE = "FILE"
+
+@dataclass
+class SwmmInflow(SwmmBaseObject):
+    """
+    SWMM [INFLOWS] entry. Identity is ``(node, constituent)``; ``constituent`` defaults to ``FLOW``.
+    """
+    node: Optional[str] = None
+    constituent: Optional[str] = None
+    time_series: Optional[str] = None
+    kind: Optional[SwmmInflowKind] = None
+    mass_unit_factor: Optional[float] = None
+    scale_factor: Optional[float] = None
+    base_value: Optional[float] = None
+    pattern: Optional[str] = None
+
+@dataclass
+class SwmmTreatment(SwmmBaseObject):
+    """
+    SWMM [TREATMENT] entry. Identity is ``(node, pollutant)``.
+    """
+    node: Optional[str] = None
+    pollutant: Optional[str] = None
+    result: Optional[str] = None  # R (removal) or C (concentration)
+    function: Optional[str] = None
+
+@dataclass
+class SwmmRaingage(SwmmBaseObject):
+    """
+    SWMM [RAINGAGES] entry. Identity is ``name`` (the settings dict key when ``name`` is None).
+    """
+    form: Optional[SwmmRaingageFormat] = None
+    interval: Optional[str] = None  # H:MM or decimal hours
+    scf: Optional[float] = None
+    source: Optional[SwmmRaingageSource] = None
+    timeseries: Optional[str] = None
+    filename: Optional[str] = None
+    station: Optional[str] = None
+    units: Optional[str] = None
+
+@dataclass
+class SwmmLidUsage(SwmmBaseObject):
+    """
+    SWMM [LID_USAGE] entry. Identity is ``(subcatchment, lid)``.
+    """
+    subcatchment: Optional[str] = None
+    lid: Optional[str] = None
+    n_replicate: Optional[int] = None
+    area: Optional[float] = None
+    width: Optional[float] = None
+    saturation_init: Optional[float] = None
+    impervious_portion: Optional[float] = None
+    route_to_pervious: Optional[float] = None
+    fn_lid_report: Optional[str] = None
+    drain_to: Optional[str] = None
+    from_pervious: Optional[float] = None
+
+# endregion
+
 
 @dataclass
 class SwmmFeatureSettings:
     """
     Options for a SWMM feature settings.
+
+    Point and line groups only update objects that already exist in the INP. The
+    hydrology and quality groups (``raingages``, ``inflows``, ``treatment`` and
+    ``lid_usage``) are create-or-replace: existing entries are updated, missing ones
+    are created. The dict key is a free label, identity comes from the object fields.
     """
     # Points
     junctions: Optional[dict[str, SwmmJunction]] = None
@@ -301,6 +399,12 @@ class SwmmFeatureSettings:
     orifices: Optional[dict[str, SwmmOrifice]] = None
     weirs: Optional[dict[str, SwmmWeir]] = None
     outlets: Optional[dict[str, SwmmOutlet]] = None
+
+    # Hydrology and quality (create-or-replace)
+    raingages: Optional[dict[str, SwmmRaingage]] = None
+    inflows: Optional[dict[str, SwmmInflow]] = None
+    treatment: Optional[dict[str, SwmmTreatment]] = None
+    lid_usage: Optional[dict[str, SwmmLidUsage]] = None
 
 # endregion
 
@@ -472,7 +576,7 @@ class SwmmCurve(SwmmBaseObject):
     SWMM curve.
     """
     kind: Optional[SwmmCurveKind] = None
-    points: Optional[list[list[float, float]]] = None
+    points: Optional[list[list[float]]] = None  # [[x, y], ...]
 
 @dataclass
 class SwmmTimeseries(SwmmBaseObject):
@@ -509,11 +613,33 @@ class SwmmOtherSettings:
     """
     Other settings for a SWMM inp file.
 
-    Controls use create-or-replace by name (dict key).
+    Curves, timeseries, patterns and controls use create-or-replace by name (dict key).
+    Existing curves and patterns are updated field by field; a missing one is created and
+    then needs ``kind``/``points`` (curves), ``cycle``/``factors`` (patterns) or ``data`` (timeseries).
     """
     curves: Optional[dict[str, SwmmCurve]] = None
     timeseries: Optional[dict[str, SwmmTimeseries]] = None
     patterns: Optional[dict[str, SwmmPattern]] = None
     controls: Optional[dict[str, SwmmControl]] = None
+
+# endregion
+
+# region Report Settings
+
+@dataclass
+class SwmmReportSettings:
+    """
+    Settings for the SWMM [REPORT] section. Only fields that are not None are written.
+
+    ``nodes``, ``links`` and ``subcatchments`` accept ``"ALL"``, ``"NONE"`` or a list of ids.
+    They drive which elements ``SwmmInpHandler.get_report_element_selection`` exports.
+    """
+    input: Optional[bool] = None
+    continuity: Optional[bool] = None
+    flowstats: Optional[bool] = None
+    controls: Optional[bool] = None
+    nodes: Optional[Union[str, list[str]]] = None
+    links: Optional[Union[str, list[str]]] = None
+    subcatchments: Optional[Union[str, list[str]]] = None
 
 # endregion

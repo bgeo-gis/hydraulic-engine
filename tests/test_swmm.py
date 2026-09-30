@@ -23,6 +23,18 @@ from hydraulic_engine.swmm import (
     SwmmOptionsSettings,
     SwmmJunction,
     SwmmFlowUnits,
+    SwmmInflow,
+    SwmmRaingage,
+    SwmmRaingageFormat,
+    SwmmRaingageSource,
+    SwmmTreatment,
+    SwmmLidUsage,
+    SwmmPattern,
+    SwmmPatternCycle,
+    SwmmCurve,
+    SwmmCurveKind,
+    SwmmTimeseries,
+    SwmmReportSettings,
 )
 from hydraulic_engine.utils.enums import RunStatus
 
@@ -216,7 +228,8 @@ class TestSwmmInpHandler:
         handler = SwmmInpHandler()
         handler.load_file(minimal_swmm_inp)
         objects = handler.get_objects()
-        json.dumps(objects)
+        # Strict JSON: unset optional fields (NaN in swmm-api) must be serialized as None.
+        json.dumps(objects, allow_nan=False)
 
         assert objects["units"] == "LPS"
         assert "J1" in objects["junctions"]
@@ -320,6 +333,285 @@ class TestSwmmControls:
                     }
                 )
             )
+
+
+class TestSwmmHydrologyAndQuality:
+    """Create-or-replace for INFLOWS, RAINGAGES, TREATMENT and LID_USAGE."""
+
+    def test_inflow_created_updated_and_round_trip(self, minimal_swmm_inp, tmp_path):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(
+                inflows={"a": SwmmInflow(node="J1", base_value=0.5, scale_factor=2.0)}
+            )
+        )
+        inflow = handler.file_object.INFLOWS[("J1", "FLOW")]
+        assert inflow.base_value == pytest.approx(0.5)
+        assert inflow.scale_factor == pytest.approx(2.0)
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(
+                inflows={"a": SwmmInflow(node="J1", constituent="FLOW", base_value=0.9)}
+            )
+        )
+        assert len(handler.file_object.INFLOWS) == 1
+        inflow = handler.file_object.INFLOWS[("J1", "FLOW")]
+        assert inflow.base_value == pytest.approx(0.9)
+        assert inflow.scale_factor == pytest.approx(2.0)
+
+        out_path = tmp_path / "inflows.inp"
+        handler.write(str(out_path))
+        reloaded = SwmmInpHandler()
+        reloaded.load_file(str(out_path))
+        assert reloaded.get_inflows()[("J1", "FLOW")].base_value == pytest.approx(0.9)
+        objects = reloaded.get_objects()
+        assert "J1|FLOW" in objects["inflows"]
+        assert {"treatment", "lid_usage", "report"} <= set(objects)
+
+    def test_inflow_without_node_raises(self, minimal_swmm_inp):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+        with pytest.raises(ValidationError, match="missing node"):
+            handler.update_inp_from_settings(
+                feature_settings=SwmmFeatureSettings(inflows={"a": SwmmInflow(base_value=1.0)})
+            )
+
+    def test_raingage_created_from_dict_key_and_updated(self, minimal_swmm_inp, tmp_path):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(
+                raingages={
+                    "RG1": SwmmRaingage(
+                        form=SwmmRaingageFormat.INTENSITY,
+                        interval="0:05",
+                        scf=1.0,
+                        source=SwmmRaingageSource.TIMESERIES,
+                        timeseries="TS1",
+                    )
+                }
+            )
+        )
+        gage = handler.file_object.RAINGAGES["RG1"]
+        assert gage.form == "INTENSITY"
+        assert gage.SCF == pytest.approx(1.0)
+        assert gage.timeseries == "TS1"
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(raingages={"RG1": SwmmRaingage(scf=1.5)})
+        )
+        assert handler.file_object.RAINGAGES["RG1"].SCF == pytest.approx(1.5)
+
+        out_path = tmp_path / "gage.inp"
+        handler.write(str(out_path))
+        reloaded = SwmmInpHandler()
+        reloaded.load_file(str(out_path))
+        assert "RG1" in reloaded.get_raingages()
+
+    def test_missing_raingage_without_required_fields_raises(self, minimal_swmm_inp):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+        with pytest.raises(ValidationError, match="cannot be created without"):
+            handler.update_inp_from_settings(
+                feature_settings=SwmmFeatureSettings(raingages={"RG9": SwmmRaingage(scf=2.0)})
+            )
+
+    def test_treatment_and_lid_usage_created(self, minimal_swmm_inp, tmp_path):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(
+                treatment={"t": SwmmTreatment(node="J1", pollutant="TSS", result="R", function="0.5")},
+                lid_usage={
+                    "l": SwmmLidUsage(
+                        subcatchment="S1", lid="BC1", n_replicate=2, area=10.0, width=1.0,
+                        saturation_init=0.0, impervious_portion=0.0,
+                    )
+                },
+            )
+        )
+        assert handler.file_object.TREATMENT[("J1", "TSS")].function == "0.5"
+        assert handler.file_object.LID_USAGE[("S1", "BC1")].n_replicate == 2
+
+        out_path = tmp_path / "quality.inp"
+        handler.write(str(out_path))
+        text = out_path.read_text(encoding="utf-8")
+        assert "[TREATMENT]" in text
+        assert "[LID_USAGE]" in text
+
+
+class TestSwmmOtherCreateOrReplace:
+    """Curves, patterns and timeseries are created when missing and updated when present."""
+
+    def test_pattern_curve_timeseries_created_then_updated(self, minimal_swmm_inp, tmp_path):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+
+        handler.update_inp_from_settings(
+            other_settings=SwmmOtherSettings(
+                patterns={"PT1": SwmmPattern(cycle=SwmmPatternCycle.HOURLY, factors=[1.0] * 24)},
+                curves={"PC1": SwmmCurve(kind=SwmmCurveKind.PUMP1, points=[[0.0, 0.0], [1.0, 2.0]])},
+                timeseries={"TS1": SwmmTimeseries(data=[(0.0, 1.0), (1.0, 2.0)])},
+            )
+        )
+        assert handler.file_object.PATTERNS["PT1"].cycle == "HOURLY"
+        assert handler.file_object.CURVES["PC1"].kind == "PUMP1"
+        assert list(handler.file_object.TIMESERIES["TS1"].data) == [(0.0, 1.0), (1.0, 2.0)]
+
+        handler.update_inp_from_settings(
+            other_settings=SwmmOtherSettings(
+                patterns={"PT1": SwmmPattern(factors=[2.0] * 24)},
+                timeseries={"TS1": SwmmTimeseries(data=[(0.0, 5.0)])},
+            )
+        )
+        assert handler.file_object.PATTERNS["PT1"].cycle == "HOURLY"
+        assert handler.file_object.PATTERNS["PT1"].factors[0] == pytest.approx(2.0)
+        assert list(handler.file_object.TIMESERIES["TS1"].data) == [(0.0, 5.0)]
+
+        out_path = tmp_path / "other.inp"
+        handler.write(str(out_path))
+        reloaded = SwmmInpHandler()
+        reloaded.load_file(str(out_path))
+        assert "PT1" in reloaded.get_patterns()
+        assert "PC1" in reloaded.get_curves()
+        assert "TS1" in reloaded.get_timeseries()
+
+    def test_missing_pattern_without_factors_raises(self, minimal_swmm_inp):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+        with pytest.raises(ValidationError, match="cannot be created without"):
+            handler.update_inp_from_settings(
+                other_settings=SwmmOtherSettings(patterns={"PT9": SwmmPattern(cycle=SwmmPatternCycle.DAILY)})
+            )
+
+
+class TestSwmmReportSettings:
+    """[REPORT] writes drive get_report_element_selection."""
+
+    def test_report_selection_round_trip(self, minimal_swmm_inp, tmp_path):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+        assert not handler.get_report_element_selection().has_any()
+
+        handler.update_inp_from_settings(
+            report_settings=SwmmReportSettings(
+                nodes=["J1", "J2"], links="ALL", subcatchments="NONE", continuity=False, controls=True,
+            )
+        )
+        selection = handler.get_report_element_selection()
+        assert selection.nodes == frozenset({"J1", "J2"})
+        assert selection.links == "ALL"
+        assert selection.subcatchments is None
+
+        out_path = tmp_path / "report.inp"
+        handler.write(str(out_path))
+        reloaded = SwmmInpHandler()
+        reloaded.load_file(str(out_path))
+        selection = reloaded.get_report_element_selection()
+        assert selection.nodes == frozenset({"J1", "J2"})
+        assert selection.links == "ALL"
+        assert reloaded.file_object.REPORT["CONTINUITY"] is False
+        assert reloaded.file_object.REPORT["CONTROLS"] is True
+
+    def test_report_none_removes_selection(self, minimal_swmm_inp):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+        handler.update_inp_from_settings(report_settings=SwmmReportSettings(subcatchments="ALL"))
+        assert handler.get_report_element_selection().subcatchments == "ALL"
+        handler.update_inp_from_settings(report_settings=SwmmReportSettings(subcatchments="NONE"))
+        assert handler.get_report_element_selection().subcatchments is None
+
+
+_SWMM_INP_WITH_EXISTING_SECTIONS = _MINIMAL_SWMM_INP.replace(
+    "[JUNCTIONS]",
+    "[REPORT]\nINPUT NO\nNODES ALL\n"
+    "[RAINGAGES]\nRG1 INTENSITY 0:05 1.0 TIMESERIES TS1\n"
+    "[TIMESERIES]\nTS1 0:00 1.0\n"
+    "[JUNCTIONS]",
+)
+
+
+class TestSwmmLazySections:
+    """swmm-api parses sections lazily; updates right after load must see the parsed section."""
+
+    @pytest.fixture
+    def inp_with_sections(self, tmp_path):
+        path = tmp_path / "sections.inp"
+        path.write_text(_SWMM_INP_WITH_EXISTING_SECTIONS, encoding="utf-8")
+        return str(path)
+
+    def test_existing_raingage_is_updated_not_recreated(self, inp_with_sections):
+        handler = SwmmInpHandler()
+        handler.load_file(inp_with_sections)
+
+        handler.update_inp_from_settings(feature_settings=SwmmFeatureSettings(raingages={"RG1": SwmmRaingage(scf=1.5)}))
+
+        gage = handler.file_object.RAINGAGES["RG1"]
+        assert gage.SCF == pytest.approx(1.5)
+        assert gage.timeseries == "TS1"
+
+    def test_existing_report_section_is_updated_in_place(self, inp_with_sections):
+        handler = SwmmInpHandler()
+        handler.load_file(inp_with_sections)
+
+        handler.update_inp_from_settings(report_settings=SwmmReportSettings(nodes=["J1"], input=True))
+
+        report = handler.file_object.REPORT
+        assert report["INPUT"] is True
+        assert handler.get_report_element_selection().nodes == frozenset({"J1"})
+
+    def test_existing_timeseries_section_is_updated_in_place(self, inp_with_sections):
+        handler = SwmmInpHandler()
+        handler.load_file(inp_with_sections)
+
+        handler.update_inp_from_settings(
+            other_settings=SwmmOtherSettings(timeseries={"TS1": SwmmTimeseries(data=[(0.0, 9.0)])})
+        )
+
+        assert list(handler.file_object.TIMESERIES["TS1"].data) == [(0.0, 9.0)]
+
+
+class TestSwmmOutletCurveType:
+    """Outlet curve types are written with the INP keyword (``FUNCTIONAL/DEPTH``)."""
+
+    def test_enum_accepts_keyword_and_legacy_member_name(self):
+        from hydraulic_engine.swmm import SwmmOutletCurveType
+
+        assert SwmmOutletCurveType("FUNCTIONAL/DEPTH") is SwmmOutletCurveType.FUNCTIONAL_DEPTH
+        assert SwmmOutletCurveType("TABULAR_HEAD") is SwmmOutletCurveType.TABULAR_HEAD
+        with pytest.raises(ValueError):
+            SwmmOutletCurveType("SOMETHING")
+
+    def test_outlet_curve_type_is_written_as_inp_keyword(self, tmp_path):
+        from hydraulic_engine.swmm import SwmmOutlet, SwmmOutletCurveType
+
+        inp = _MINIMAL_SWMM_INP.replace(
+            "[XSECTIONS]", "[OUTLETS]\nW1 J1 O1 0 TABULAR/DEPTH OC1 NO\n[XSECTIONS]"
+        )
+        path = tmp_path / "outlet.inp"
+        path.write_text(inp, encoding="utf-8")
+        handler = SwmmInpHandler()
+        handler.load_file(str(path))
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(
+                outlets={
+                    "W1": SwmmOutlet(
+                        curve_type=SwmmOutletCurveType.FUNCTIONAL_DEPTH, curve_description=(2.0, 0.6)
+                    )
+                }
+            )
+        )
+        out_path = tmp_path / "outlet_out.inp"
+        handler.write(str(out_path))
+
+        text = out_path.read_text(encoding="utf-8")
+        assert "FUNCTIONAL/DEPTH" in text
+        assert "FUNCTIONAL_DEPTH" not in text
 
 
 class TestSwmmSettingsPassthrough:

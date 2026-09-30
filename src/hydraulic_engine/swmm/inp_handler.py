@@ -5,15 +5,19 @@ General Public License as published by the Free Software Foundation, either vers
 or (at your option) any later version.
 """
 # -*- coding: utf-8 -*-
+import math
 import os
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field, fields
+from typing import Any, Dict, List, Optional, Tuple
 
 from swmm_api.input_file.section_labels import REPORT
-from swmm_api.input_file.sections import Control
+from swmm_api.input_file.sections import (
+    Control, Curve, Inflow, LIDUsage, Pattern, RainGage, ReportSection, TimeseriesData, Treatment,
+)
 
 from .export_db import ReportElementSelection, parse_report_kind
 from .file_handler import SwmmFileHandler
-from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings
+from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings, SwmmReportSettings
 from ..utils import tools_log
 from ..utils.tools_exceptions import format_exception_chain
 from ..exceptions import FileLoadError, FileWriteError, ModelNotLoadedError, ValidationError
@@ -34,8 +38,14 @@ def _get_section_dict(handler: "SwmmInpHandler", section_name: str) -> Dict[str,
 
 
 def _to_plain(value: Any) -> Any:
-    """Recursively convert swmm-api objects to JSON-serializable primitives."""
-    if value is None or isinstance(value, (bool, int, float, str)):
+    """Recursively convert swmm-api objects to JSON-serializable primitives.
+
+    Non-finite floats (swmm-api uses NaN for unset optional fields) become None, since NaN is not
+    valid JSON and would break strict encoders.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if value is None or isinstance(value, (bool, int, str)):
         return value
     if isinstance(value, (list, tuple)):
         return [_to_plain(v) for v in value]
@@ -58,12 +68,65 @@ def _serialize_section_map(handler: "SwmmInpHandler", section_name: str) -> Dict
     out: Dict[str, Any] = {}
     for key, obj in raw.items():
         plain = _to_plain(obj)
+        # Composite section keys (INFLOWS, TREATMENT, LID_USAGE, ...) are serialized as "a|b".
+        label = "|".join(str(part) for part in key) if isinstance(key, tuple) else str(key)
         if isinstance(plain, dict):
             plain.pop("name", None)
-            out[str(key)] = plain
-        else:
-            out[str(key)] = plain
+        out[label] = plain
     return out
+
+
+def _plain_value(value: Any) -> Any:
+    """Enum members become their value; everything else is unchanged."""
+    return value.value if hasattr(value, "value") else value
+
+
+@dataclass(frozen=True)
+class _UpsertSpec:
+    """How to create-or-replace one INP section from settings objects.
+
+    :param cls: swmm-api object class
+    :param label: INP section label
+    :param identity: model fields that form the section key (in order)
+    :param required: model fields needed to create a missing entry
+    :param defaults: values used for identity fields that are not set
+    :param attr_map: model field -> swmm-api attribute/keyword when the names differ
+    """
+    cls: Any
+    label: str
+    identity: Tuple[str, ...]
+    required: Tuple[str, ...]
+    defaults: Dict[str, Any] = field(default_factory=dict)
+    attr_map: Dict[str, str] = field(default_factory=dict)
+
+
+# Feature groups that create missing entries instead of only updating existing ones.
+_FEATURE_UPSERT_SPECS: Dict[str, _UpsertSpec] = {
+    "raingages": _UpsertSpec(
+        cls=RainGage, label="RAINGAGES", identity=("name",),
+        required=("form", "interval", "scf", "source"), attr_map={"scf": "SCF"},
+    ),
+    "inflows": _UpsertSpec(
+        cls=Inflow, label="INFLOWS", identity=("node", "constituent"),
+        required=(), defaults={"constituent": "FLOW"},
+    ),
+    "treatment": _UpsertSpec(
+        cls=Treatment, label="TREATMENT", identity=("node", "pollutant"),
+        required=("result", "function"),
+    ),
+    "lid_usage": _UpsertSpec(
+        cls=LIDUsage, label="LID_USAGE", identity=("subcatchment", "lid"),
+        required=("n_replicate", "area", "width", "saturation_init", "impervious_portion"),
+    ),
+}
+
+# Other settings that create missing entries. The value is (swmm-api class, section label,
+# fields required to create a missing entry).
+_OTHER_UPSERT_SPECS: Dict[str, Tuple[Any, str, Tuple[str, ...]]] = {
+    "curves": (Curve, "CURVES", ("kind", "points")),
+    "patterns": (Pattern, "PATTERNS", ("cycle", "factors")),
+    "timeseries": (TimeseriesData, "TIMESERIES", ("data",)),
+}
 
 
 class SwmmInpHandler(SwmmFileHandler):
@@ -167,6 +230,7 @@ class SwmmInpHandler(SwmmFileHandler):
         feature_settings: Optional[SwmmFeatureSettings] = None,
         options_settings: Optional[SwmmOptionsSettings] = None,
         other_settings: Optional[SwmmOtherSettings] = None,
+        report_settings: Optional[SwmmReportSettings] = None,
     ) -> None:
         """
         Update INP file with provided settings.
@@ -178,6 +242,7 @@ class SwmmInpHandler(SwmmFileHandler):
         :param feature_settings: Feature settings to update
         :param options_settings: Options settings to update
         :param other_settings: Other settings to update
+        :param report_settings: [REPORT] section settings to update
         """
 
         _require_inp_loaded(self)
@@ -191,6 +256,9 @@ class SwmmInpHandler(SwmmFileHandler):
 
         if other_settings:
             self._update_other_settings(other_settings, validation_errors)
+
+        if report_settings:
+            self._update_report(report_settings)
 
         if validation_errors:
             raise ValidationError(
@@ -210,6 +278,11 @@ class SwmmInpHandler(SwmmFileHandler):
 
             features_dict = getattr(feature_settings, section_name, None)
             if features_dict is None:
+                continue
+
+            spec = _FEATURE_UPSERT_SPECS.get(section_name)
+            if spec is not None:
+                self._upsert_objects(spec, features_dict, validation_errors)
                 continue
 
             section_name = section_name.upper()
@@ -283,6 +356,10 @@ class SwmmInpHandler(SwmmFileHandler):
                 self._update_controls(setting_dict, validation_errors)
                 continue
 
+            if attr_name in _OTHER_UPSERT_SPECS:
+                self._upsert_other(attr_name, setting_dict, validation_errors)
+                continue
+
             # Convert attribute name to uppercase section name (e.g., 'curves' -> 'CURVES')
             section_name = attr_name.upper()
 
@@ -299,6 +376,154 @@ class SwmmInpHandler(SwmmFileHandler):
             for item_name, item_obj in setting_dict.items():
                 if item_name in inp_section:
                     self._update_object_attributes(inp_section[item_name], item_obj)
+
+    def _ensure_section(self, cls: Any, label: str) -> Any:
+        """Return the parsed INP section ``label``, creating an empty one when it is missing.
+
+        swmm-api parses sections lazily: ``inp.get`` would return the raw text of a section that has
+        not been accessed yet, so the section is always read through ``inp[label]``.
+        """
+        inp = self.file_object
+        if label not in inp:
+            inp[label] = cls.create_section()
+        return inp[label]
+
+    @staticmethod
+    def _set_values(item: Any) -> Dict[str, Any]:
+        """Fields of a settings object that are not None, with enums as plain values."""
+        values: Dict[str, Any] = {}
+        for item_field in fields(item):
+            value = getattr(item, item_field.name)
+            if value is not None:
+                values[item_field.name] = _plain_value(value)
+        return values
+
+    def _upsert_objects(
+        self,
+        spec: _UpsertSpec,
+        items: dict,
+        validation_errors: list[str],
+    ) -> None:
+        """Create or update entries of a section whose identity comes from the object fields."""
+        section = None
+        for key, item in items.items():
+            values = self._set_values(item)
+            if spec.identity == ("name",):
+                values.setdefault("name", str(key))
+            for default_field, default in spec.defaults.items():
+                values.setdefault(default_field, default)
+
+            missing_identity = [name for name in spec.identity if values.get(name) is None]
+            if missing_identity:
+                msg = f"{spec.label} '{key}': missing {', '.join(missing_identity)}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+
+            parts = tuple(str(values[name]) for name in spec.identity)
+            section_key = parts[0] if len(parts) == 1 else parts
+            if section is None:
+                section = self._ensure_section(spec.cls, spec.label)
+
+            existing = section.get(section_key)
+            if existing is not None:
+                for name, value in values.items():
+                    if name in spec.identity or name == "name":
+                        continue
+                    setattr(existing, spec.attr_map.get(name, name), value)
+                continue
+
+            missing = [name for name in spec.required if name not in values]
+            if missing:
+                msg = f"{spec.label} '{key}' does not exist and cannot be created without {', '.join(missing)}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+
+            kwargs = {
+                spec.attr_map.get(name, name): value
+                for name, value in values.items()
+                if name != "name" or "name" in spec.identity
+            }
+            section.add_obj(spec.cls(**kwargs))
+
+    def _upsert_other(
+        self,
+        attr_name: str,
+        items: dict,
+        validation_errors: list[str],
+    ) -> None:
+        """Create or update curves, patterns and timeseries by name (dict key)."""
+        cls, label, required = _OTHER_UPSERT_SPECS[attr_name]
+        section = None
+        for name, item in items.items():
+            values = self._set_values(item)
+            values.pop("name", None)
+            if section is None:
+                section = self._ensure_section(cls, label)
+            existing = section.get(name)
+
+            if attr_name == "timeseries":
+                data = values.get("data")
+                if data is not None:
+                    section.add_obj(TimeseriesData(name, list(data)))
+                elif existing is None:
+                    msg = f"{label} '{name}' does not exist and cannot be created without data"
+                    tools_log.log_warning(msg)
+                    validation_errors.append(msg)
+                continue
+
+            if existing is not None:
+                for attr, value in values.items():
+                    if hasattr(existing, attr):
+                        setattr(existing, attr, value)
+                continue
+
+            missing = [attr for attr in required if attr not in values]
+            if missing:
+                msg = f"{label} '{name}' does not exist and cannot be created without {', '.join(missing)}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+
+            if attr_name == "curves":
+                section.add_obj(Curve(name, values["kind"], [list(point) for point in values["points"]]))
+            else:
+                section.add_obj(Pattern(name, values["cycle"], factors=list(values["factors"])))
+
+    def _update_report(self, report_settings: SwmmReportSettings) -> None:
+        """Write the [REPORT] section fields that are not None."""
+        inp = self.file_object
+        # Read through ``inp[...]``: ``inp.get`` returns the raw text of a section not parsed yet.
+        if REPORT not in inp:
+            inp[REPORT] = ReportSection()
+        section = inp[REPORT]
+
+        keys = ReportSection.KEYS
+        for key, value in (
+            (keys.INPUT, report_settings.input),
+            (keys.CONTINUITY, report_settings.continuity),
+            (keys.FLOWSTATS, report_settings.flowstats),
+            (keys.CONTROLS, report_settings.controls),
+        ):
+            if value is not None:
+                section[key] = bool(value)
+
+        for key, value in (
+            (keys.NODES, report_settings.nodes),
+            (keys.LINKS, report_settings.links),
+            (keys.SUBCATCHMENTS, report_settings.subcatchments),
+        ):
+            if value is None:
+                continue
+            selection = parse_report_kind(value)
+            if selection is None:
+                if key in section:
+                    del section[key]
+            elif selection == 'ALL':
+                section[key] = 'ALL'
+            else:
+                section[key] = sorted(selection)
 
     def _update_controls(
         self,
@@ -564,6 +789,9 @@ class SwmmInpHandler(SwmmFileHandler):
             "raingages": _serialize_section_map(self, "RAINGAGES"),
             "inflows": _serialize_section_map(self, "INFLOWS"),
             "dwf": _serialize_section_map(self, "DWF"),
+            "treatment": _serialize_section_map(self, "TREATMENT"),
+            "lid_usage": _serialize_section_map(self, "LID_USAGE"),
+            "report": _to_plain(_get_section_dict(self, "REPORT")),
             "title": self.get_title(),
             "file": getattr(inp, "filename", None) or self.file_path,
         }

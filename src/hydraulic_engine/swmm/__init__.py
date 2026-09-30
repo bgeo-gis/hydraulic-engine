@@ -31,7 +31,9 @@ from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings,
                     SwmmCrossSectionShape, SwmmOutfallKind, SwmmDividerKind, SwmmStorageKind, \
                     SwmmPumpStatus, SwmmOrificeOrientation, SwmmWeirForm, SwmmWeirRoadSurface, SwmmOutletCurveType, \
                     SwmmFlowUnits, SwmmInfiltration, SwmmFlowRouting, SwmmLinkOffsets, SwmmForceMainEquation, \
-                    SwmmInertialDamping, SwmmNormalFlowLimited, SwmmPatternCycle, SwmmCurveKind
+                    SwmmInertialDamping, SwmmNormalFlowLimited, SwmmPatternCycle, SwmmCurveKind, \
+                    SwmmReportSettings, SwmmInflow, SwmmTreatment, SwmmRaingage, SwmmLidUsage, \
+                    SwmmInflowKind, SwmmRaingageFormat, SwmmRaingageSource
 
 __all__ = [
     # Exceptions
@@ -88,4 +90,12 @@ __all__ = [
     "SwmmWeirForm",
     "SwmmWeirRoadSurface",
     "SwmmOutletCurveType",
+    "SwmmReportSettings",
+    "SwmmInflow",
+    "SwmmTreatment",
+    "SwmmRaingage",
+    "SwmmLidUsage",
+    "SwmmInflowKind",
+    "SwmmRaingageFormat",
+    "SwmmRaingageSource",
 ]

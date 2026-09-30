@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- SWMM `SwmmFeatureSettings` gains create-or-replace groups `raingages`, `inflows`, `treatment`
+  and `lid_usage` (`SwmmRaingage`, `SwmmInflow`, `SwmmTreatment`, `SwmmLidUsage`). Identity comes
+  from the object fields (`node` + `constituent`, `node` + `pollutant`, `subcatchment` + `lid`;
+  raingages use `name` or the dict key). Existing entries are updated field by field; missing ones
+  are created and need their required fields.
+- SWMM `SwmmReportSettings` and the `report_settings` argument of
+  `SwmmInpHandler.update_inp_from_settings` / `SwmmRunner.run` write the `[REPORT]` section
+  (`input`, `continuity`, `flowstats`, `controls`, and `nodes` / `links` / `subcatchments` as
+  `ALL`, `NONE` or an id list), so `get_report_element_selection` and the OUT export follow them.
+
+- `SwmmInpHandler.get_objects()` also returns `treatment`, `lid_usage` and `report`.
+
+### Changed
+
+- `SwmmCurve.points` is annotated as `list[list[float]]` (the previous `list[float, float]` could
+  not be decoded from JSON by annotation-driven builders).
+- SWMM `curves`, `patterns` and `timeseries` in `SwmmOtherSettings` are now create-or-replace:
+  missing entries are created (curves need `kind` + `points`, patterns `cycle` + `factors`,
+  timeseries `data`) instead of being ignored.
+- `SwmmInpHandler.get_objects()` serializes composite section keys (INFLOWS, TREATMENT, LID_USAGE,
+  DWF) as `a|b` instead of the Python tuple repr.
+
+### Fixed
+
+- `SwmmInpHandler.get_objects()` returns `None` instead of `NaN` for unset optional fields, so the
+  result is valid strict JSON (the `/swmm/inp/objects` response no longer depends on lenient encoders).
+- `SwmmInpHandler.update_inp_from_settings` no longer fails on sections that swmm-api has not parsed
+  yet (`RAINGAGES`, `REPORT`, `INFLOWS`, `TREATMENT`, `LID_USAGE`, `CURVES`, `PATTERNS`, `TIMESERIES`
+  present in the INP): they are read through `inp[...]` instead of `inp.get(...)`, which returned the
+  raw section text.
+- `SwmmOutletCurveType` values are the INP keywords (`TABULAR/DEPTH`, `FUNCTIONAL/HEAD`, ...), so
+  outlets are no longer written with an invalid `FUNCTIONAL_DEPTH` keyword. The member names
+  (`TABULAR_DEPTH`) are still accepted when decoding.
+
 ## [0.10.1] - 2026-09-29
 
 ### Fixed

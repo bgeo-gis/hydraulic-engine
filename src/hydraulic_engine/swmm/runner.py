@@ -16,7 +16,7 @@ from ..utils.enums import RunStatus, ExportDataSource
 from .export_db import finalize_result
 from .rpt_handler import SwmmRptHandler
 from .out_handler import SwmmOutHandler
-from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings
+from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings, SwmmReportSettings
 from .inp_handler import SwmmInpHandler
 from ..utils import tools_log
 from ..utils.tools_exceptions import RPT_ERROR_CODE_RE, collect_engine_failure
@@ -125,7 +125,8 @@ class SwmmRunner:
         feature_settings: Optional[SwmmFeatureSettings] = None,
         options_settings: Optional[SwmmOptionsSettings] = None,
         other_settings: Optional[SwmmOtherSettings] = None,
-        step_callback: Optional[Callable[[Any, int], bool]] = None
+        step_callback: Optional[Callable[[Any, int], bool]] = None,
+        report_settings: Optional[SwmmReportSettings] = None,
     ) -> SwmmRunResult:
         """
         Run SWMM simulation using pyswmm.
@@ -142,6 +143,7 @@ class SwmmRunner:
         :param other_settings: Other settings for the simulation
         :param step_callback: After each step. Return True to continue, False to abort.
             None return is treated as continue.
+        :param report_settings: [REPORT] section settings for the simulation
         :return: SwmmRunResult with simulation results
         """
         result = SwmmRunResult()
@@ -169,11 +171,12 @@ class SwmmRunner:
         result.rpt_path = self.rpt.file_path
         result.out_path = self.out.file_path
 
-        if feature_settings or options_settings or other_settings:
+        if feature_settings or options_settings or other_settings or report_settings:
             self.inp.update_inp_from_settings(
                 feature_settings=feature_settings,
                 options_settings=options_settings,
                 other_settings=other_settings,
+                report_settings=report_settings,
             )
             temp_inp_path = self.inp.get_file_path(None, ".inp")
             self.inp.write(output_path=temp_inp_path)
