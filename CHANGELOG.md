@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- EPANET patterns and curves are create-or-replace and are applied before network
+  features, so a demand, pump, valve or tank can reference one that was not in
+  the source INP. A new pattern needs `multipliers`; a new curve needs
+  `curve_type` and `points` (`PUMP` is stored as WNTR `HEAD`). Junctions, pipes,
+  pumps, valves, tanks and reservoirs stay update-only.
 - `SwmmCurve.points` is annotated as `list[list[float]]` (the previous `list[float, float]` could
   not be decoded from JSON by annotation-driven builders).
 - SWMM `curves`, `patterns` and `timeseries` in `SwmmOtherSettings` are now create-or-replace:

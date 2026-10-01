@@ -32,6 +32,7 @@ from .models import (
     EpanetOtherSettings,
 )
 from .units import (
+    convert_curve_points,
     convert_demand_base,
     convert_feature_from_si,
     convert_feature_value,
@@ -39,6 +40,7 @@ from .units import (
     convert_option_from_si,
     convert_option_value,
     get_flow_units,
+    resolve_curve_type,
 )
 from ..utils import tools_log
 from ..utils.tools_exceptions import format_exception_chain
@@ -54,14 +56,6 @@ _FEATURE_CONFIG = {
     'pipes': ('pipe_name_list', 'get_link'),
     'pumps': ('pump_name_list', 'get_link'),
     'valves': ('valve_name_list', 'get_link'),
-}
-
-# Configuration for other settings mapping to WNTR methods
-# Format: other_type -> (name_list_attr, getter_method)
-# Controls and rules are handled separately (create-or-replace by name).
-_OTHER_CONFIG = {
-    'patterns': ('pattern_name_list', 'get_pattern'),
-    'curves': ('curve_name_list', 'get_curve'),
 }
 
 # Attributes that require special handling (not direct assignment)
@@ -212,9 +206,12 @@ class EpanetInpHandler(EpanetFileHandler):
         Numeric hydraulic fields are converted to SI with WNTR ``to_si`` before
         they are applied to the in-memory network. See ``docs/units.md``.
 
-        Options are applied before features so that ``inpfile_units`` and
-        ``headloss`` from the same call govern feature conversion (e.g. D-W
-        roughness). Only non-None fields are updated.
+        Options are applied first so that ``inpfile_units`` and ``headloss``
+        from the same call govern conversion. Patterns and curves are created
+        or updated next, before network features, because WNTR resolves those
+        names when a demand, pump, valve or tank is updated. Controls and
+        rules are applied last. Only non-None fields are updated. Network
+        objects that are missing are rejected; patterns and curves are created.
 
         :param feature_settings: Feature settings to update (junctions, pipes, etc.)
         :param options_settings: Options settings to update (simulation parameters)
@@ -228,11 +225,16 @@ class EpanetInpHandler(EpanetFileHandler):
         if options_settings:
             self._update_options(options_settings)
 
+        # Patterns and curves before features so new names already exist.
+        if other_settings:
+            self._upsert_patterns_and_curves(other_settings, validation_errors)
+
         if feature_settings:
             self._update_features(feature_settings, validation_errors)
 
         if other_settings:
-            self._update_other_settings(other_settings, validation_errors)
+            self._update_controls(other_settings.controls, validation_errors)
+            self._update_rules(other_settings.rules, validation_errors)
 
         if validation_errors:
             raise ValidationError(
@@ -434,45 +436,63 @@ class EpanetInpHandler(EpanetFileHandler):
                             f"Cannot set option '{attr_name}' on {section_name}"
                         )
 
-    def _update_other_settings(
+    def _upsert_patterns_and_curves(
         self,
         other_settings: EpanetOtherSettings,
         validation_errors: list[str],
     ) -> None:
-        """
-        Update INP other settings (patterns, curves, controls, rules).
-
-        Patterns and curves only update existing elements.
-        Controls and rules use create-or-replace by name.
-        """
+        """Create or update patterns and curves. Network objects are not created here."""
         wn = self.file_object
+        flow_units = get_flow_units(wn)
 
-        for other_type, config in _OTHER_CONFIG.items():
-            other_dict = getattr(other_settings, other_type, None)
-            if other_dict is None:
-                continue
-
-            name_list_attr, getter_method = config
-            name_list = getattr(wn, name_list_attr)
-            getter = getattr(wn, getter_method)
-
-            for element_name, model_obj in other_dict.items():
-                if element_name not in name_list:
-                    msg = (
-                        f"{other_type[:-1].title()} '{element_name}' "
-                        f"not found in network"
-                    )
-                    tools_log.log_warning(msg)
-                    validation_errors.append(msg)
-                    continue
-
-                wntr_obj = getter(element_name)
+        for name, model_obj in (other_settings.patterns or {}).items():
+            if name in wn.pattern_name_list:
                 self._update_object_attributes(
-                    wntr_obj, model_obj, validation_errors
+                    wn.get_pattern(name), model_obj, validation_errors
                 )
+                continue
+            multipliers = getattr(model_obj, "multipliers", None)
+            if not multipliers:
+                msg = (
+                    f"Pattern '{name}' does not exist and cannot be created "
+                    "without multipliers"
+                )
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+            try:
+                wn.add_pattern(name, [float(value) for value in multipliers])
+            except Exception as e:
+                msg = f"Failed to create pattern '{name}': {e}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
 
-        self._update_controls(other_settings.controls, validation_errors)
-        self._update_rules(other_settings.rules, validation_errors)
+        for name, model_obj in (other_settings.curves or {}).items():
+            if name in wn.curve_name_list:
+                self._update_object_attributes(
+                    wn.get_curve(name), model_obj, validation_errors
+                )
+                continue
+            curve_type = resolve_curve_type(model_obj, None)
+            points = getattr(model_obj, "points", None)
+            if curve_type is None or not points:
+                msg = (
+                    f"Curve '{name}' does not exist and cannot be created "
+                    "without curve_type and points"
+                )
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
+                continue
+            try:
+                wn.add_curve(
+                    name,
+                    curve_type,
+                    convert_curve_points(flow_units, points, curve_type),
+                )
+            except Exception as e:
+                msg = f"Failed to create curve '{name}': {e}"
+                tools_log.log_warning(msg)
+                validation_errors.append(msg)
 
     def _update_controls(
         self,

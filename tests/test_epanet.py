@@ -19,6 +19,9 @@ from hydraulic_engine.epanet import (
     EpanetOtherSettings,
     EpanetControl,
     EpanetRule,
+    EpanetPattern,
+    EpanetCurve,
+    EpanetCurveType,
     EpanetFeatureSettings,
     EpanetJunction,
     EpanetDemand,
@@ -286,6 +289,97 @@ class TestEpanetInpHandler:
         handler.file_object = object()  # pretend loaded
         with pytest.raises(FileLoadError, match="not found"):
             handler.validate_inp()
+
+
+class TestEpanetPatternsAndCurves:
+    """Patterns and curves are created or replaced before network features."""
+
+    def test_create_missing_pattern_and_use_it(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+
+        handler.update_inp_from_settings(
+            feature_settings=EpanetFeatureSettings(
+                junctions={
+                    "11": EpanetJunction(
+                        demand_list=[
+                            EpanetDemand(base_demand=1.5, pattern_name="PNEW"),
+                        ]
+                    )
+                }
+            ),
+            other_settings=EpanetOtherSettings(
+                patterns={"PNEW": EpanetPattern(multipliers=[1.0, 0.5])}
+            ),
+        )
+        pattern = handler.get_patterns()["PNEW"]
+        assert list(pattern.multipliers) == [1.0, 0.5]
+        demand = handler.get_demands()["junctions"]["11"]["demand_list"][0]
+        assert demand["pattern_name"] == "PNEW"
+
+    def test_replace_existing_pattern(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+        handler.update_inp_from_settings(
+            other_settings=EpanetOtherSettings(
+                patterns={"P1": EpanetPattern(multipliers=[1.0, 2.0])}
+            )
+        )
+        handler.update_inp_from_settings(
+            other_settings=EpanetOtherSettings(
+                patterns={"P1": EpanetPattern(multipliers=[0.25, 0.75])}
+            )
+        )
+        assert list(handler.get_patterns()["P1"].multipliers) == [0.25, 0.75]
+
+    def test_create_missing_pump_curve_as_head(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+        handler.update_inp_from_settings(
+            other_settings=EpanetOtherSettings(
+                curves={
+                    "CNEW": EpanetCurve(
+                        curve_type=EpanetCurveType.PUMP,
+                        points=[(10.0, 40.0), (0.0, 50.0)],
+                    )
+                }
+            )
+        )
+        curve = handler.get_curves()["CNEW"]
+        stored_type = getattr(curve.curve_type, "name", curve.curve_type)
+        assert str(stored_type).upper() == "HEAD"
+        expected = [
+            (
+                float(to_si(FlowUnits.LPS, 10.0, HydParam.Flow)),
+                float(to_si(FlowUnits.LPS, 40.0, HydParam.HydraulicHead)),
+            ),
+            (
+                float(to_si(FlowUnits.LPS, 0.0, HydParam.Flow)),
+                float(to_si(FlowUnits.LPS, 50.0, HydParam.HydraulicHead)),
+            ),
+        ]
+        stored = [(float(point[0]), float(point[1])) for point in curve.points]
+        assert stored == pytest.approx(expected)
+
+    def test_new_pattern_without_multipliers_raises(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+        with pytest.raises(ValidationError, match="without multipliers"):
+            handler.update_inp_from_settings(
+                other_settings=EpanetOtherSettings(
+                    patterns={"PNEW": EpanetPattern()}
+                )
+            )
+
+    def test_missing_junction_still_rejected(self, minimal_epanet_inp):
+        handler = EpanetInpHandler()
+        handler.load_file(minimal_epanet_inp)
+        with pytest.raises(ValidationError, match="not found"):
+            handler.update_inp_from_settings(
+                feature_settings=EpanetFeatureSettings(
+                    junctions={"MISSING": EpanetJunction(elevation=1.0)}
+                )
+            )
 
 
 class TestEpanetControlsAndRules:

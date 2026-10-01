@@ -724,7 +724,9 @@ class EpanetOtherSettings:
     Other settings for EPANET INP file.
 
     Contains patterns, curves, simple controls, and rules.
-    Controls and rules use create-or-replace by name (dict key).
+    Patterns, curves, controls and rules use create-or-replace by name
+    (dict key). A missing pattern needs ``multipliers``; a missing curve
+    needs ``curve_type`` and ``points``. Network objects are not created.
     """
     patterns: Optional[dict[str, EpanetPattern]] = None
     curves: Optional[dict[str, EpanetCurve]] = None
