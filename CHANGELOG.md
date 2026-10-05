@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-05
+
 ### Changed
 
 - EPANET curve settings use the WNTR type `HEAD`. `EpanetCurveType.PUMP` is no longer accepted.
@@ -235,7 +237,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for batch operations to efficiently create/update Things, Datastreams, and Observations
   - Integration with existing export framework (`ExportDataSource.FROST`)
 
-[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.11.0...main
+[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.12.0...main
+[0.12.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.9.0...v0.10.0
