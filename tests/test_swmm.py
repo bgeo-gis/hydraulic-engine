@@ -35,6 +35,7 @@ from hydraulic_engine.swmm import (
     SwmmCurveKind,
     SwmmTimeseries,
     SwmmReportSettings,
+    SwmmLoss,
 )
 from hydraulic_engine.utils.enums import RunStatus
 
@@ -671,3 +672,30 @@ class TestSwmmOutHandler:
         handler = SwmmOutHandler()
         with pytest.raises(ModelNotLoadedError):
             handler.export_to_database(result_id="1")
+
+
+class TestSwmmLosses:
+    """[LOSSES] is create-or-replace and round-trips through get_objects."""
+
+    def test_loss_round_trip(self, minimal_swmm_inp):
+        handler = SwmmInpHandler()
+        handler.load_file(minimal_swmm_inp)
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(
+                losses={"C1": SwmmLoss(entrance=0.5, exit=0.2, average=0.1, has_flap_gate=True, seepage_rate=0.01)}
+            )
+        )
+        objects = handler.get_objects()
+        loss = objects["losses"]["C1"]
+        assert loss["entrance"] == pytest.approx(0.5)
+        assert loss["exit"] == pytest.approx(0.2)
+        assert loss["average"] == pytest.approx(0.1)
+        assert loss["has_flap_gate"] is True
+        assert loss["seepage_rate"] == pytest.approx(0.01)
+
+        handler.update_inp_from_settings(
+            feature_settings=SwmmFeatureSettings(losses={"C1": SwmmLoss(entrance=0.9)})
+        )
+        replaced = handler.get_objects()["losses"]["C1"]
+        assert replaced["entrance"] == pytest.approx(0.9)
+        assert replaced["has_flap_gate"] is True

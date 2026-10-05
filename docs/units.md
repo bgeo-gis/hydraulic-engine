@@ -64,8 +64,8 @@ Pump `initial_setting` / `base_speed` are relative speed — **never** convert.
 
 ### Curve `points`
 
-Resolve `curve_type` from settings else the existing curve (`PUMP` treated as
-`HEAD`):
+Resolve `curve_type` from settings else the existing curve. Types are the WNTR
+names (`HEAD`, `HEADLOSS`, `VOLUME`, `EFFICIENCY`):
 
 | Curve type | X | Y |
 |------------|---|---|

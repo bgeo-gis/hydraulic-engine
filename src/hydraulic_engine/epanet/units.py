@@ -94,10 +94,7 @@ def _unwrap_enum(value: Any) -> Any:
 def _normalize_curve_type(curve_type: Any) -> Optional[str]:
     if curve_type is None:
         return None
-    name = str(_unwrap_enum(curve_type)).upper()
-    if name == "PUMP":
-        return "HEAD"
-    return name
+    return str(_unwrap_enum(curve_type)).upper()
 
 
 def resolve_valve_type(source_obj: Any, target_obj: Any) -> Optional[str]:

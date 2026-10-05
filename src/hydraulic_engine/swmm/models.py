@@ -182,6 +182,21 @@ class SwmmLink(SwmmBaseObject):
     to_node: Optional[str] = None
     cross_section: Optional[SwmmCrossSection] = None
 
+
+@dataclass
+class SwmmLoss(SwmmBaseObject):
+    """
+    One SWMM ``[LOSSES]`` row (swmm_api ``Loss``).
+
+    Keyed by conduit id. Names match the INP section, not a host application's columns.
+    """
+    entrance: Optional[float] = None
+    exit: Optional[float] = None
+    average: Optional[float] = None
+    has_flap_gate: Optional[bool] = None
+    seepage_rate: Optional[float] = None
+
+
 @dataclass
 class SwmmJunction(SwmmNode):
     """
@@ -405,6 +420,9 @@ class SwmmFeatureSettings:
     inflows: Optional[dict[str, SwmmInflow]] = None
     treatment: Optional[dict[str, SwmmTreatment]] = None
     lid_usage: Optional[dict[str, SwmmLidUsage]] = None
+
+    # [LOSSES], create-or-replace by conduit id
+    losses: Optional[dict[str, SwmmLoss]] = None
 
 # endregion
 

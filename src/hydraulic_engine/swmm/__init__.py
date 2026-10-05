@@ -26,7 +26,7 @@ from .rpt_handler import SwmmRptHandler
 from .out_handler import SwmmOutHandler
 from .file_handler import SwmmFileHandler
 from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings, \
-                    SwmmCrossSection, SwmmJunction, SwmmOutfall, SwmmDivider, SwmmStorage, SwmmConduit, SwmmPump, \
+                    SwmmCrossSection, SwmmLoss, SwmmJunction, SwmmOutfall, SwmmDivider, SwmmStorage, SwmmConduit, SwmmPump, \
                     SwmmOrifice, SwmmWeir, SwmmOutlet, SwmmCurve, SwmmTimeseries, SwmmPattern, SwmmControl, \
                     SwmmCrossSectionShape, SwmmOutfallKind, SwmmDividerKind, SwmmStorageKind, \
                     SwmmPumpStatus, SwmmOrificeOrientation, SwmmWeirForm, SwmmWeirRoadSurface, SwmmOutletCurveType, \
@@ -59,6 +59,7 @@ __all__ = [
     "SwmmOptionsSettings",
     "SwmmOtherSettings",
     "SwmmCrossSection",
+    "SwmmLoss",
     "SwmmJunction",
     "SwmmOutfall",
     "SwmmDivider",

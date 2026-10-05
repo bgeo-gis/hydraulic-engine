@@ -642,7 +642,7 @@ class EpanetCurveType(Enum):
     WNTR: curve_type attribute on Curve object
     EPANET INP: ;TYPE comment in [CURVES] section
     """
-    PUMP = "PUMP"            # Pump curve (head vs flow) - also known as HEAD
+    HEAD = "HEAD"              # Pump head curve (flow vs head)
     EFFICIENCY = "EFFICIENCY"  # Pump efficiency curve
     VOLUME = "VOLUME"        # Tank volume curve
     HEADLOSS = "HEADLOSS"    # GPV headloss curve

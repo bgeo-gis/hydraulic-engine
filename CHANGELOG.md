@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- EPANET curve settings use the WNTR type `HEAD`. `EpanetCurveType.PUMP` is no longer accepted.
+
+### Added
+
+- SWMM `[LOSSES]` is create-or-replace through `SwmmFeatureSettings.losses` (`SwmmLoss`: `entrance`, `exit`, `average`, `has_flap_gate`, `seepage_rate`). `get_objects()` returns the same names under `losses`.
+
 ## [0.11.0] - 2026-10-01
 
 ### Added

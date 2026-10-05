@@ -339,7 +339,7 @@ class TestEpanetPatternsAndCurves:
             other_settings=EpanetOtherSettings(
                 curves={
                     "CNEW": EpanetCurve(
-                        curve_type=EpanetCurveType.PUMP,
+                        curve_type=EpanetCurveType.HEAD,
                         points=[(10.0, 40.0), (0.0, 50.0)],
                     )
                 }

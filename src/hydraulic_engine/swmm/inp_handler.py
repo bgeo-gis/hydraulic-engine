@@ -10,9 +10,9 @@ import os
 from dataclasses import dataclass, field, fields
 from typing import Any, Dict, List, Optional, Tuple
 
-from swmm_api.input_file.section_labels import REPORT
+from swmm_api.input_file.section_labels import LOSSES, REPORT
 from swmm_api.input_file.sections import (
-    Control, Curve, Inflow, LIDUsage, Pattern, RainGage, ReportSection, TimeseriesData, Treatment,
+    Control, Curve, Inflow, LIDUsage, Loss, Pattern, RainGage, ReportSection, TimeseriesData, Treatment,
 )
 
 from .export_db import ReportElementSelection, parse_report_kind
@@ -250,6 +250,8 @@ class SwmmInpHandler(SwmmFileHandler):
 
         if feature_settings:
             self._update_features(feature_settings, validation_errors)
+            if feature_settings.losses:
+                self._update_losses(feature_settings.losses)
 
         if options_settings:
             self._update_options(options_settings, validation_errors)
@@ -594,6 +596,25 @@ class SwmmInpHandler(SwmmFileHandler):
                 if hasattr(target_obj, attr_name):
                     setattr(target_obj, attr_name, value)
 
+    def _update_losses(self, losses: dict) -> None:
+        """Create or replace ``[LOSSES]`` rows. The dict key is the conduit id."""
+        section = self._ensure_section(Loss, LOSSES)
+        for link_name, item in losses.items():
+            values = self._set_values(item)
+            if link_name in section:
+                self._update_object_attributes(section[link_name], item)
+                continue
+            section.add_obj(
+                Loss(
+                    link_name,
+                    entrance=values.get("entrance", 0),
+                    exit=values.get("exit", 0),
+                    average=values.get("average", 0),
+                    has_flap_gate=values.get("has_flap_gate", False),
+                    seepage_rate=values.get("seepage_rate", 0),
+                )
+            )
+
     def _update_cross_section(self, link_name: str, cross_section_obj) -> None:
         """
         Update cross-section in XSECTIONS section for a given link.
@@ -783,6 +804,7 @@ class SwmmInpHandler(SwmmFileHandler):
             "outlets": _serialize_section_map(self, "OUTLETS"),
             "subcatchments": _serialize_section_map(self, "SUBCATCHMENTS"),
             "xsections": _serialize_section_map(self, "XSECTIONS"),
+            "losses": _serialize_section_map(self, "LOSSES"),
             "patterns": _serialize_section_map(self, "PATTERNS"),
             "curves": _serialize_section_map(self, "CURVES"),
             "timeseries": _serialize_section_map(self, "TIMESERIES"),
