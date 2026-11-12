@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Declare `six` as a dependency. WNTR still imports it but does not list it, which broke clean CI installs.
 - Title stamp tests and the SWMM write stub used by exception-chain tests after the local-time `[TITLE]` change.
 
 ## [0.13.0] - 2026-11-12
