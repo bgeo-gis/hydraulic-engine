@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- EPANET and SWMM `write` stamp a Hydraulic Engine `[TITLE]` (package version and UTC datetime). Optional `title_extra` lines are appended as opaque caller context.
+
 ## [0.12.0] - 2026-10-05
 
 ### Changed

@@ -20,7 +20,7 @@ by using WNTR attribute names directly in the model classes.
 import os
 import wntr
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 from dataclasses import fields, is_dataclass
 from wntr.network.controls import _ControlType
 from wntr.epanet.io import _EpanetRule, _read_control_line
@@ -43,6 +43,7 @@ from .units import (
     resolve_curve_type,
 )
 from ..utils import tools_log
+from ..utils.inp_title import build_inp_title
 from ..utils.tools_exceptions import format_exception_chain
 from ..exceptions import FileLoadError, FileWriteError, ModelNotLoadedError, ValidationError
 
@@ -121,11 +122,19 @@ class EpanetInpHandler(EpanetFileHandler):
         handler.write("modified_model.inp")
     """
 
-    def write(self, output_path: Optional[str] = None) -> bool:
+    def write(
+        self,
+        output_path: Optional[str] = None,
+        title_extra: Optional[Sequence[str]] = None,
+    ) -> bool:
         """
         Write INP file to disk.
-        
+
+        Always replaces ``[TITLE]`` with the Hydraulic Engine stamp (version and
+        UTC datetime) plus optional opaque caller lines.
+
         :param output_path: Output path (uses original path if not provided)
+        :param title_extra: Extra ``[TITLE]`` lines appended after the base stamp
         :return: True if successful
         """
         if self.file_object is None:
@@ -134,6 +143,7 @@ class EpanetInpHandler(EpanetFileHandler):
 
         try:
             path = output_path or self.file_path
+            self.file_object.title = build_inp_title(title_extra)
             wntr.network.write_inpfile(self.file_object, path)
             tools_log.log_info(f"Successfully wrote INP file: {path}")
             return True

@@ -8,17 +8,18 @@ or (at your option) any later version.
 import math
 import os
 from dataclasses import dataclass, field, fields
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from swmm_api.input_file.section_labels import LOSSES, REPORT
+from swmm_api.input_file.section_labels import LOSSES, REPORT, TITLE
 from swmm_api.input_file.sections import (
-    Control, Curve, Inflow, LIDUsage, Loss, Pattern, RainGage, ReportSection, TimeseriesData, Treatment,
+    Control, Curve, Inflow, LIDUsage, Loss, Pattern, RainGage, ReportSection, TimeseriesData, TitleSection, Treatment,
 )
 
 from .export_db import ReportElementSelection, parse_report_kind
 from .file_handler import SwmmFileHandler
 from .models import SwmmFeatureSettings, SwmmOptionsSettings, SwmmOtherSettings, SwmmReportSettings
 from ..utils import tools_log
+from ..utils.inp_title import build_inp_title
 from ..utils.tools_exceptions import format_exception_chain
 from ..exceptions import FileLoadError, FileWriteError, ModelNotLoadedError, ValidationError
 
@@ -148,11 +149,19 @@ class SwmmInpHandler(SwmmFileHandler):
         handler.write("modified_model.inp")
     """
 
-    def write(self, output_path: Optional[str] = None) -> bool:
+    def write(
+        self,
+        output_path: Optional[str] = None,
+        title_extra: Optional[Sequence[str]] = None,
+    ) -> bool:
         """
         Write INP file to disk.
-        
+
+        Always replaces ``[TITLE]`` with the Hydraulic Engine stamp (version and
+        UTC datetime) plus optional opaque caller lines.
+
         :param output_path: Output path (uses original path if not provided)
+        :param title_extra: Extra ``[TITLE]`` lines appended after the base stamp
         :return: True if successful
         """
         if self.file_object is None:
@@ -161,6 +170,11 @@ class SwmmInpHandler(SwmmFileHandler):
 
         try:
             path = output_path or self.file_path
+            text = "\n".join(build_inp_title(title_extra))
+            if TITLE in self.file_object:
+                self.file_object[TITLE].txt = text
+            else:
+                self.file_object[TITLE] = TitleSection(text)
             self.file_object.write_file(path)
             tools_log.log_info(f"Successfully wrote INP file: {path}")
             return True
