@@ -182,6 +182,12 @@ class TestFileLoadErrorSurfacesRootCause:
 
     def test_swmm_write_error_includes_root_cause(self, tmp_path):
         class FailingInp:
+            def __contains__(self, _key):
+                return False
+
+            def __setitem__(self, _key, _value):
+                return None
+
             def write_file(self, _path):
                 raise _chained_exception()
 

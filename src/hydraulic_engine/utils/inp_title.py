@@ -7,7 +7,7 @@ or (at your option) any later version.
 Stamp a caller-agnostic [TITLE] block on every INP write.
 """
 # -*- coding: utf-8 -*-
-from datetime import datetime, timezone
+from datetime import datetime
 from importlib import metadata
 from typing import Optional, Sequence
 

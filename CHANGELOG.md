@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Title stamp tests and the SWMM write stub used by exception-chain tests after the local-time `[TITLE]` change.
+
 ## [0.13.0] - 2026-11-12
 
 ### Added
 
-- EPANET and SWMM `write` stamp a Hydraulic Engine `[TITLE]` (package version and UTC datetime). Optional `title_extra` lines are appended as opaque caller context.
+- EPANET and SWMM `write` stamp a Hydraulic Engine `[TITLE]` (package version and local datetime with UTC offset). Optional `title_extra` lines are appended as opaque caller context.
 
 ## [0.12.0] - 2026-10-05
 

@@ -63,15 +63,17 @@ def _title_block(text: str) -> str:
 
 
 def test_build_inp_title_aligns_base_and_appends_extras():
+    generated = datetime(2026, 11, 12, 14, 51, 3, tzinfo=timezone.utc)
     lines = build_inp_title(
-        ["Giswater version: 4.17.7", "  ", ";Source result: wb1"],
-        generated_at=datetime(2026, 11, 12, 14, 51, 3, tzinfo=timezone.utc),
+        ["Test Title", "  ", ";Source result: wb1"],
+        generated_at=generated,
     )
+    expected_dt = generated.astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
     assert lines[0] == ";Created by Hydraulic Engine"
     assert lines[1] == f";Hydraulic Engine version: {engine_version()}"
-    assert lines[2] == ";Datetime:                 2026-11-12 14:51:03"
+    assert lines[2] == f";Datetime:                 {expected_dt}"
     assert lines[1].index(engine_version()) == lines[2].index("2026-11-12")
-    assert lines[3] == ";Giswater version: 4.17.7"
+    assert lines[3] == ";Test Title"
     assert lines[4] == ";Source result: wb1"
 
 
