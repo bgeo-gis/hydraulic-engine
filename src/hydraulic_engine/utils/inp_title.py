@@ -33,12 +33,10 @@ def build_inp_title(
     Datetime is UTC at generation time (the write), not a value supplied by the caller.
     Extra lines are appended as-is after a leading ``;`` is added when missing.
     """
-    generated_dt = generated_at or datetime.now(timezone.utc)
-    if generated_dt.tzinfo is not None:
-        generated_dt = generated_dt.astimezone(timezone.utc)
+    generated_dt = (generated_at or datetime.now()).astimezone()
     rows = [
         ("Hydraulic Engine version", engine_version()),
-        ("Datetime", generated_dt.strftime("%Y-%m-%d %H:%M:%S")),
+        ("Datetime", generated_dt.strftime("%Y-%m-%d %H:%M:%S %z")),
     ]
     width = max(len(f"{key}:") for key, _ in rows) + 1
     lines = [_CREATED_BY] + [
