@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-12
+
 ### Fixed
 
 - Title stamp tests and the SWMM write stub used by exception-chain tests after the local-time `[TITLE]` change.
@@ -247,7 +249,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Support for batch operations to efficiently create/update Things, Datastreams, and Observations
   - Integration with existing export framework (`ExportDataSource.FROST`)
 
-[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.13.0...main
+[unreleased]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.13.1...main
+[0.13.1]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/bgeo-gis/hydraulic-engine/compare/v0.10.1...v0.11.0
