@@ -359,7 +359,9 @@ class TestEpanetPatternsAndCurves:
             ),
         ]
         stored = [(float(point[0]), float(point[1])) for point in curve.points]
-        assert stored == pytest.approx(expected)
+        assert len(stored) == len(expected)
+        for got, want in zip(stored, expected):
+            assert got == pytest.approx(want)
 
     def test_new_pattern_without_multipliers_raises(self, minimal_epanet_inp):
         handler = EpanetInpHandler()
