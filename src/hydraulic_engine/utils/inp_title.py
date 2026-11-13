@@ -6,11 +6,11 @@ or (at your option) any later version.
 
 Stamp a caller-agnostic [TITLE] block on every INP write.
 """
+
 # -*- coding: utf-8 -*-
+from collections.abc import Sequence
 from datetime import datetime
 from importlib import metadata
-from typing import Optional, Sequence
-
 
 _CREATED_BY = ";Created by Hydraulic Engine"
 
@@ -24,13 +24,13 @@ def engine_version() -> str:
 
 
 def build_inp_title(
-    title_extra: Optional[Sequence[str]] = None,
+    title_extra: Sequence[str] | None = None,
     *,
-    generated_at: Optional[datetime] = None,
+    generated_at: datetime | None = None,
 ) -> list[str]:
     """Base TITLE lines plus optional opaque caller lines.
 
-    Datetime is UTC at generation time (the write), not a value supplied by the caller.
+    Datetime is the process local timezone at write time (with UTC offset).
     Extra lines are appended as-is after a leading ``;`` is added when missing.
     """
     generated_dt = (generated_at or datetime.now()).astimezone()
@@ -39,9 +39,7 @@ def build_inp_title(
         ("Datetime", generated_dt.strftime("%Y-%m-%d %H:%M:%S %z")),
     ]
     width = max(len(f"{key}:") for key, _ in rows) + 1
-    lines = [_CREATED_BY] + [
-        f";{f'{key}:':<{width}}{value}" for key, value in rows
-    ]
+    lines = [_CREATED_BY] + [f";{f'{key}:':<{width}}{value}" for key, value in rows]
     for extra in title_extra or ():
         text = str(extra).strip()
         if not text:
