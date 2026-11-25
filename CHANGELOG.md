@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `hydraulic_engine.timeseries` extracts one or more EPANET BIN / SWMM OUT
+  variable series for given objects (INP units on WS), without loading full
+  network frames.
+
 ## [0.13.1] - 2026-11-12
 
 ### Fixed
